@@ -27,6 +27,5 @@ Then in Xcode: **General → Frameworks, Libraries, and Embedded Content →
 Add… → Add Other → Add Files…** and pick
 `Open4IDSDK-0.3.3.xcframework` with **Embed & Sign**.
 
-## Updating the folder (release process)
 
 Please read `USER_GUIDE.md` for usage.
