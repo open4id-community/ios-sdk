@@ -57,14 +57,15 @@ In Xcode: **File → Add Package Dependencies…** and enter:
 https://github.com/open4id-community/ios-sdk
 ```
 
-Use the version rule **Up to Next Major** from `0.3.3`. SDK releases are
-tagged with plain semver tags (`v0.3.3`), which is what SPM resolves.
+Use the version rule **Up to Next Major** from `0.4.0`. SDK releases are
+tagged with plain semver tags (`v0.4.0` on the mirror repo), which is what
+SPM resolves.
 
 In `Package.swift`, the equivalent is:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/open4id-community/ios-sdk", from: "0.3.3")
+    .package(url: "https://github.com/open4id-community/ios-sdk", from: "0.4.0")
 ]
 ```
 
@@ -81,7 +82,7 @@ then:
 
 ```bash
 shasum -a 256 -c SHA256SUMS          # optional integrity check
-unzip Open4IDSDK-0.3.3.xcframework.zip -d ~/open4id-ios-sdk
+unzip Open4IDSDK-0.4.0.xcframework.zip -d ~/open4id-ios-sdk
 ```
 
 In Xcode: **General → Frameworks, Libraries, and Embedded Content →
@@ -353,7 +354,7 @@ Open4IDLoginDialogHandleObjC *handle = [Open4IDLoginDialogObjC
 [handle close];
 ```
 
-Google/GitHub/Apple inside the dialog use the same client — set
+Google/GitHub/Facebook/Apple inside the dialog use the same client — set
 `setPresentationAnchor` (and, for Google, `setGoogleAuthorizationCodeProvider:`
 for ObjC hosts) before opening it.
 
@@ -364,14 +365,23 @@ links go through the Open4ID Portal bridge, which returns the per-provider
 callback URL to the SDK. The SDK handles opening, state/nonce generation,
 and code exchange.
 
-### Apple and GitHub — built-in
+### Apple, GitHub, and Facebook — built-in
 
-`signInWithApple` and `signInWithGitHub` use
-`ASWebAuthenticationSession` over the Open4ID Portal bridges. Both are
+`signInWithApple`, `signInWithGitHub`, and `signInWithFacebook` use
+`ASWebAuthenticationSession` over the Open4ID Portal bridges. All are
 first-party APIs on iOS, so the SDK owns the browser round-trip itself:
 
 - GitHub scopes: `read:user user:email`; posts `github_code` + the
   registered `github_redirect_uri`.
+- Facebook: the OAuth dialog at `facebook.com` (pinned Graph API
+  version, `scope=email`); the SDK posts `facebook_code` + the
+  registered `facebook_redirect_uri`. The callback URI must be
+  registered in the Facebook app's *Valid OAuth Redirect URIs* — the
+  Portal shows the exact per-bundleId bridge URL
+  (`<portalOrigin>/facebook-callback/<bundleId>`, or the origin-derived
+  `<redirect-origin>/facebook-callback` for https redirect URIs). The
+  granted email is required: a player who declines the email permission
+  fails closed at the exchange (`invalid_grant`).
 - Apple: `scope=email` + `response_mode=form_post`; the OAuth
   `nonce` doubles as state for anti-replay; posts `apple_code` + the
   registered `apple_return_uri`.
@@ -422,9 +432,10 @@ it before presenting sign-in:
 
 ### Callback deep links
 
-Apple and GitHub flows return control to your app through the portal-callback
-custom scheme in the registered redirect URI
-(`<bundleId>://open4id/github-callback`, `<bundleId>://open4id/apple-callback`).
+GitHub, Facebook, and Apple flows return control to your app through the
+portal-callback custom scheme in the registered redirect URI
+(`<bundleId>://open4id/github-callback`, `<bundleId>://open4id/facebook-callback`,
+`<bundleId>://open4id/apple-callback`).
 Make sure the bundle-id scheme is registered in **Info → URL Types** (see
 [Project setup](#project-setup)); without it the `ASWebAuthenticationSession`
 times out and you see `popup_timeout`.
@@ -597,7 +608,7 @@ Pass the store at `configure`; switch the backend at runtime with
 | `SdkValidationError` with `fieldErrors["redirectUri"]` | The redirect URI is not exact-registered or misses a custom scheme; compare with the value in the Open4ID console (character-for-character). |
 | `sdk.not_initialized` | `configure` did not complete successfully (or was never called) before another method ran. |
 | `client.auth.not_authenticated` | The session expired or was cleared externally; use `ensureSession(minValidityMs:)` before gameplay. |
-| `client.auth.popup_timeout` from Apple/GitHub | The custom scheme is not registered in URL Types, or the sign-in browser was dismissed/blocked; re-register the scheme and call again. |
+| `client.auth.popup_timeout` from Apple/GitHub/Facebook | The custom scheme is not registered in URL Types, or the sign-in browser was dismissed/blocked; re-register the scheme and call again. |
 | `client.auth.provider_unavailable` when calling Google on iOS | Expected — implement/override `getGoogleAuthorizationCode` or register a provider (see [Social providers](#social-providers)). |
 | `SdkRateLimitedError` (`150001`) | Rate limit hit; honor `retryAfterSec` before retrying the same request. |
 | Keychain item missing after relaunch | No store passed at configure time — pass `KeychainSessionStore(...)`; also check `lastStatus`. |

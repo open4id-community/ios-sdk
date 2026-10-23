@@ -6,7 +6,7 @@
 // (root, tracked on `main`) and its SHA-256 is recorded in SHA256SUMS.
 //
 // Consumers:
-//     .package(url: "https://github.com/open4id-community/ios-sdk", from: "0.3.3")
+//     .package(url: "https://github.com/open4id-community/ios-sdk", from: "0.4.0")
 // Objective-C consumers instead download the zip manually and embed it in
 // Xcode (see README.md).
 //
@@ -27,8 +27,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "Open4IDSDK",
-            url: "https://github.com/open4id-community/ios-sdk/raw/main/Open4IDSDK-0.3.3.xcframework.zip",
-            checksum: "7537a1e3bcfa8235bf23d44a74b1b7b08f7b962d5cf9c943e4933d3ce18358f1"
+            url: "https://github.com/open4id-community/ios-sdk/raw/main/Open4IDSDK-0.4.0.xcframework.zip",
+            checksum: "8a09740a9fe5b8c0707615d39b330b4bc42c2f1b5462b8046724f5896f0f2091"
         )
     ]
 )
