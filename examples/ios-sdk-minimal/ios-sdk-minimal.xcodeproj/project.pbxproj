@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		AA00000000000000000000B1 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000A1 /* ContentView.swift */; };
 		AA00000000000000000000B2 /* Open4IDMinimalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000A2 /* Open4IDMinimalApp.swift */; };
-		AA00000000000000000000B3 /* Open4IDSDK-0.3.3.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000A5 /* Open4IDSDK-0.3.3.xcframework */; };
+		AA00000000000000000000B3 /* Open4IDSDK-0.4.0.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000A5 /* Open4IDSDK-0.4.0.xcframework */; };
 		AA00000000000000000000B4 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AA000000000000000000000D /* GoogleSignIn */; };
 		AA00000000000000000000B5 /* Open4IDSocialClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000A4 /* Open4IDSocialClient.swift */; };
 /* End PBXBuildFile section */
@@ -19,7 +19,7 @@
 		AA00000000000000000000A2 /* Open4IDMinimalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Open4IDMinimalApp.swift; sourceTree = "<group>"; };
 		AA00000000000000000000A3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA00000000000000000000A4 /* Open4IDSocialClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Open4IDSocialClient.swift; sourceTree = "<group>"; };
-		AA00000000000000000000A5 /* Open4IDSDK-0.3.3.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ../../Open4IDSDK-0.3.3.xcframework; sourceTree = "<group>"; };
+		AA00000000000000000000A5 /* Open4IDSDK-0.4.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ../../Open4IDSDK-0.4.0.xcframework; sourceTree = "<group>"; };
 		AA00000000000000000000C1 /* ios-sdk-minimal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ios-sdk-minimal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -28,7 +28,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000000B3 /* Open4IDSDK-0.3.3.xcframework in Frameworks */,
+				AA00000000000000000000B3 /* Open4IDSDK-0.4.0.xcframework in Frameworks */,
 				AA00000000000000000000B4 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -40,7 +40,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00000000000000000000F2 /* ios-sdk-minimal */,
-				AA00000000000000000000A5 /* Open4IDSDK-0.3.3.xcframework */,
+				AA00000000000000000000A5 /* Open4IDSDK-0.4.0.xcframework */,
 				AA00000000000000000000F3 /* Products */,
 			);
 			sourceTree = "<group>";

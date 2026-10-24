@@ -12,7 +12,7 @@
 		BB00000000000000000000B3 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A4 /* ViewController.m */; };
 		BB00000000000000000000B4 /* Open4IDSocialClient.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A6 /* Open4IDSocialClient.m */; };
 		BB00000000000000000000B7 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A9 /* SceneDelegate.m */; };
-		BB00000000000000000000B5 /* Open4IDSDK-0.3.3.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000AB /* Open4IDSDK-0.3.3.xcframework */; };
+		BB00000000000000000000B5 /* Open4IDSDK-0.4.0.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000AB /* Open4IDSDK-0.4.0.xcframework */; };
 		BB00000000000000000000B6 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = BB000000000000000000000E /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
@@ -27,7 +27,7 @@
 		BB00000000000000000000A8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB00000000000000000000A9 /* SceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
 		BB00000000000000000000AA /* SceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
-		BB00000000000000000000AB /* Open4IDSDK-0.3.3.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ../../Open4IDSDK-0.3.3.xcframework; sourceTree = "<group>"; };
+		BB00000000000000000000AB /* Open4IDSDK-0.4.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ../../Open4IDSDK-0.4.0.xcframework; sourceTree = "<group>"; };
 		BB00000000000000000000AD /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = text; name = module.modulemap; path = Open4IDSDKModule/module.modulemap; sourceTree = "<group>"; };
 		BB00000000000000000000C1 /* ios-sdk-minimal-objc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ios-sdk-minimal-objc.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -37,7 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BB00000000000000000000B5 /* Open4IDSDK-0.3.3.xcframework in Frameworks */,
+				BB00000000000000000000B5 /* Open4IDSDK-0.4.0.xcframework in Frameworks */,
 				BB00000000000000000000B6 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -49,7 +49,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000000F2 /* ios-sdk-minimal-objc */,
-				BB00000000000000000000AB /* Open4IDSDK-0.3.3.xcframework */,
+				BB00000000000000000000AB /* Open4IDSDK-0.4.0.xcframework */,
 				BB00000000000000000000F3 /* Products */,
 			);
 			sourceTree = "<group>";

@@ -19,6 +19,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (strong, nonatomic) UITextField *environmentField;
 @property (strong, nonatomic) UITextField *publicSdkKeyField;
 @property (strong, nonatomic) UITextField *endpointField;
+@property (strong, nonatomic) UITextField *portalOriginField;
 @property (strong, nonatomic) UITextField *redirectUriField;
 @property (strong, nonatomic) UITextField *bundleIdField;
 @property (strong, nonatomic) UITextField *googleIosClientIdField;
@@ -53,7 +54,17 @@ static NSString *const kDefaultAppId = @"app_4a17c6406abaefdf0d9a705e7175b37c";
 static NSString *const kDefaultEnvironment = @"development";
 static NSString *const kDefaultPublicSdkKey =
     @"sdk_pk_24cf6cc954d16591812fd1b9953ef053f5133b13f7cec9ae";
+/// Dev fixture / launch-override defaults: `SIMCTL_CHILD_OPEN4ID_*`
+/// environment variables pre-fill the config fields (same hook as the
+/// Swift sibling sample) and `OPEN4ID_AUTOTEST` auto-runs one web flow.
+static NSString *const kEnvEndpoint = @"OPEN4ID_ENDPOINT";
+static NSString *const kEnvPortalOrigin = @"OPEN4ID_PORTAL_ORIGIN";
+static NSString *const kEnvAutotest = @"OPEN4ID_AUTOTEST";
+
+/// Launch-time field default (environment override pre-fills; empty keeps
+/// the built-in fixture default).
 static NSString *const kDefaultEndpoint = @"https://id.open4id.com/api";
+static NSString *const kDefaultPortalOrigin = @"https://app.open4id.com";
 static NSString *const kDefaultRedirectUri =
     @"com.open4id.example.ios://open4id/callback";
 static NSString *const kDefaultBundleId = @"com.open4id.example.ios";
@@ -141,7 +152,9 @@ static NSString *const kDefaultGoogleIosClientId =
     [self.stackView addArrangedSubview:
         [self labeledField:@"Public SDK key" field:[self textFieldWithPlaceholder:@"Public SDK key" defaultValue:kDefaultPublicSdkKey] height:fieldHeight storingTo:&_publicSdkKeyField]];
     [self.stackView addArrangedSubview:
-        [self labeledField:@"Endpoint" field:[self textFieldWithPlaceholder:@"Endpoint" defaultValue:kDefaultEndpoint] height:fieldHeight storingTo:&_endpointField]];
+        [self labeledField:@"Endpoint" field:[self textFieldWithPlaceholder:@"Endpoint" defaultValue:[self fieldDefault:kDefaultEndpoint envKey:kEnvEndpoint]] height:fieldHeight storingTo:&_endpointField]];
+    [self.stackView addArrangedSubview:
+        [self labeledField:@"Portal origin" field:[self textFieldWithPlaceholder:@"Portal origin" defaultValue:[self fieldDefault:kDefaultPortalOrigin envKey:kEnvPortalOrigin]] height:fieldHeight storingTo:&_portalOriginField]];
     [self.stackView addArrangedSubview:
         [self labeledField:@"Redirect URI" field:[self textFieldWithPlaceholder:@"Redirect URI" defaultValue:kDefaultRedirectUri] height:fieldHeight storingTo:&_redirectUriField]];
     [self.stackView addArrangedSubview:
@@ -158,6 +171,7 @@ static NSString *const kDefaultGoogleIosClientId =
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Sign in with Google" action:@selector(tapSignInGoogle) height:buttonHeight style:UIButtonTypeSystem]];
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Continue as guest" action:@selector(tapContinueAsGuest) height:buttonHeight style:UIButtonTypeSystem]];
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Sign in with GitHub" action:@selector(tapSignInGitHub) height:buttonHeight style:UIButtonTypeSystem]];
+    [self.stackView addArrangedSubview:[self buttonWithTitle:@"Sign in with Facebook" action:@selector(tapSignInFacebook) height:buttonHeight style:UIButtonTypeSystem]];
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Sign in with Apple" action:@selector(tapSignInApple) height:buttonHeight style:UIButtonTypeSystem]];
 
     // MARK: Session section
@@ -293,6 +307,11 @@ static NSString *const kDefaultGoogleIosClientId =
     return row;
 }
 
+- (NSString *)fieldDefault:(NSString *)fallback envKey:(NSString *)key {
+    NSString *value = [NSProcessInfo.processInfo.environment objectForKey:key];
+    return value.length ? value : fallback;
+}
+
 - (UITextField *)textFieldWithPlaceholder:(NSString *)placeholder defaultValue:(NSString *)defaultValue {
     UITextField *field = [[UITextField alloc] init];
     field.placeholder = placeholder;
@@ -341,6 +360,11 @@ static NSString *const kDefaultGoogleIosClientId =
                            scope:nil
                        bundleId:self.bundleIdField.text
                           error:error];
+    if (error && *error) return;
+    // The per-app Portal bridges (github/facebook/apple-callback) resolve
+    // against this origin — never resets session state, so it is safe on
+    // every configure (validation errors surface through `error` too).
+    [client setPortalOriginWithPortalOrigin:self.portalOriginField.text error:error];
 }
 
 - (void)runAction:(void (^ _Nullable)(NSError * _Nullable))action {
@@ -393,9 +417,29 @@ static NSString *const kDefaultGoogleIosClientId =
                                  bootstrap.displayName ?: bootstrap.appId,
                                  bootstrap.login.google.enabled ? @"true" : @"false"]];
                 self.lastBootstrap = bootstrap;
+                [self runAutotestIfRequested];
             });
         }];
     }];
+}
+
+/// Debug hook for automated verification (mirrors the Swift sibling
+/// sample): when launched with `OPEN4ID_AUTOTEST=facebook`, auto-run one
+/// web flow after a 5 s settle delay so the typed outcome lands in the
+/// log console without tapping anything.
+- (void)runAutotestIfRequested {
+    NSString *autotest = [NSProcessInfo.processInfo.environment objectForKey:kEnvAutotest];
+    if (!autotest.length) return;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if ([autotest isEqualToString:@"facebook"]) {
+            [self tapSignInFacebook];
+        } else if ([autotest isEqualToString:@"github"]) {
+            [self tapSignInGitHub];
+        } else if ([autotest isEqualToString:@"apple"]) {
+            [self tapSignInApple];
+        }
+    });
 }
 
 #pragma mark - Actions
@@ -475,6 +519,27 @@ static NSString *const kDefaultGoogleIosClientId =
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self appendLog:[NSString stringWithFormat:@"github ok: sub=%@ scope=%@",
                                  session.userId, session.scope]];
+            });
+        }];
+    }];
+}
+
+- (void)tapSignInFacebook {
+    [self runAction:^(NSError * _Nullable error) {
+        if (error) return;
+        [self.authClient signInWithFacebookWithCallbackUri:nil
+                                                completion:^(AuthSession * _Nullable session,
+                                                             NSError * _Nullable err) {
+            if (err) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self appendLog:[NSString stringWithFormat:@"facebook failed: %@",
+                                      err.userInfo[@"key"] ?: err.localizedDescription]];
+                });
+                return;
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self appendLog:[NSString stringWithFormat:@"facebook ok: sub=%@ scope=%@",
+                                  session.userId, session.scope]];
             });
         }];
     }];

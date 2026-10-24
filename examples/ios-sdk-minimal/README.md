@@ -8,7 +8,7 @@ action order, and an append-only log console.
 
 - Xcode 15+ (verified with Xcode 27.1), iOS 16+ simulator or device.
 - The app links the SDK as the prebuilt **XCFramework**
-  (`../../Open4IDSDK-0.3.3.xcframework`, repo root) — no registry dependency.
+  (`../../Open4IDSDK-0.4.0.xcframework`, repo root) — no registry dependency.
   GoogleSignIn is resolved via SPM from the sample project.
 
 ## Build & run

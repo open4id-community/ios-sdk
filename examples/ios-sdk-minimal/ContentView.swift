@@ -13,7 +13,13 @@ struct ContentView: View {
     @State private var appId = "app_4a17c6406abaefdf0d9a705e7175b37c"
     @State private var environment = "development"
     @State private var publicSdkKey = "sdk_pk_24cf6cc954d16591812fd1b9953ef053f5133b13f7cec9ae"
-    @State private var endpoint = "https://id.open4id.com/api"
+    @State private var endpoint =
+        ProcessInfo.processInfo.environment["OPEN4ID_ENDPOINT"] ?? "https://id.open4id.com/api"
+    /// Portal origin hosting the per-app social bridges (GitHub/Facebook/
+    /// Apple callback pages). Defaults to the production Portal; point it
+    /// at the local Portal for development runs.
+    @State private var portalOrigin =
+        ProcessInfo.processInfo.environment["OPEN4ID_PORTAL_ORIGIN"] ?? "https://app.open4id.com"
     @State private var redirectUri = "com.open4id.example.ios://open4id/callback"
     @State private var bundleId = "com.open4id.example.ios"
     /// The GCP iOS-type Google OAuth client (same project as the Web
@@ -69,6 +75,7 @@ struct ContentView: View {
                     field("Environment", $environment)
                     field("Public SDK key", $publicSdkKey)
                     field("Endpoint", $endpoint)
+                    field("Portal origin", $portalOrigin)
                     field("Redirect URI", $redirectUri)
                     field("Bundle ID", $bundleId)
                     field("Google iOS client ID", $googleIosClientId)
@@ -82,6 +89,7 @@ struct ContentView: View {
                     Button("Sign in with Google") { run(signInGoogle) }
                     Button("Continue as guest") { run(continueAsGuest) }
                     Button("Sign in with GitHub") { run(signInGitHub) }
+                    Button("Sign in with Facebook") { run(signInFacebook) }
                     Button("Sign in with Apple") { run(signInApple) }
                 }
 
@@ -166,13 +174,15 @@ struct ContentView: View {
                     let report = await Attestation.collect()
                     append("attestation: \(report.verdict.rawValue) (\(report.reason ?? "-"))")
                     // Debug hook for automated verification: launch with
-                    // SIMCTL_CHILD_OPEN4ID_AUTOTEST=github|apple to auto-run
-                    // one web flow (after a 5 s settle delay) and log the
-                    // typed outcome.
+                    // SIMCTL_CHILD_OPEN4ID_AUTOTEST=github|facebook|apple to
+                    // auto-run one web flow (after a 5 s settle delay) and
+                    // log the typed outcome.
                     if let autotest = ProcessInfo.processInfo.environment["OPEN4ID_AUTOTEST"] {
                         try await Task.sleep(nanoseconds: 5_000_000_000)
                         if autotest == "github" {
                             try await signInGitHub()
+                        } else if autotest == "facebook" {
+                            try await signInFacebook()
                         } else if autotest == "apple" {
                             try await signInApple()
                         } else if autotest == "github-ephemeral" {
@@ -234,6 +244,8 @@ struct ContentView: View {
                                 endpoint: endpoint,
                                 redirectUri: redirectUri,
                                 bundleId: bundleId)
+        // Never resets session state, so this is safe on every configure.
+        try appClient.setPortalOrigin(portalOrigin)
     }
 
     /// Binds the login-UI view model to the current client + bootstrap
@@ -242,6 +254,7 @@ struct ContentView: View {
         authModel.setLocale("en")
         authModel.appName = nil
         authModel.githubCallbackUri = nil
+        authModel.facebookCallbackUri = nil
         authModel.appleReturnUri = nil
         authModel.setAuthClient(appClient)
         authModel.setBootstrap(appClient.getBootstrap())
@@ -288,6 +301,11 @@ struct ContentView: View {
 
     private func signInGitHub() async throws {
         let session = try await appClient.signInWithGitHub()
+        showSession(session)
+    }
+
+    private func signInFacebook() async throws {
+        let session = try await appClient.signInWithFacebook()
         showSession(session)
     }
 
