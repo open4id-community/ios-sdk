@@ -3,7 +3,7 @@ import PackageDescription
 let package = Package(
     name: "Open4IDSDK",
     platforms: [
-        .iOS(.v16)
+        .iOS(.v16),
         .macOS(.v13)
     ],
     products: [
