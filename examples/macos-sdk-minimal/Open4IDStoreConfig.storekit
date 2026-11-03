@@ -1,0 +1,96 @@
+{
+  "identifier" : "A17C64DC",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "64000001",
+      "localizations" : [
+        {
+          "description" : "Permanent one-time unlock (test_pk_01).",
+          "displayName" : "Pkg 01 One-Time",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.open4id.example.pkg_01",
+      "referenceName" : "Pkg 01 (one_time)",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "64000002",
+      "localizations" : [
+        {
+          "description" : "Coins bought and delivered on the Open4ID ledger.",
+          "displayName" : "Pkg 02 Consumable",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.open4id.example.pkg_02",
+      "referenceName" : "Pkg 02 (consumable)",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "64000003",
+      "localizations" : [
+        {
+          "description" : "Monthly Premium access (test_pk_03).",
+          "displayName" : "Pkg 03 Subscription",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.open4id.example.pkg_03",
+      "referenceName" : "Pkg 03 (subscription)",
+      "type" : "RecurringSubscription"
+    }
+  ],
+  "settings" : {
+
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "64000000",
+      "localizations" : [
+
+      ],
+      "name" : "Open4ID Example",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "0.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "64000003",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Monthly Premium access (test_pk_03).",
+              "displayName" : "Pkg 03 Subscription",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.open4id.example.pkg_03",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pkg 03 (subscription)",
+          "subscriptionGroupID" : "64000000",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
