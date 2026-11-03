@@ -1,9 +1,9 @@
 # Open4ID iOS SDK — User Guide
 
 Welcome to the Open4ID iOS SDK (`Open4IDSDK`), a Swift authentication SDK for
-Open4ID player identity in iOS games and apps. This guide walks producers
-through installation, configuration, sign-in, and the operational details
-needed to ship to the App Store.
+Open4ID player identity in iOS and macOS games and apps. This guide walks
+producers through installation, configuration, sign-in, and the operational
+details needed to ship to the App Store and the Mac App Store.
 
 For a condensed reference, see [README.md](README.md). For support, open an
 issue at <https://github.com/open4id-community/ios-sdk/issues>.
@@ -33,17 +33,18 @@ issue at <https://github.com/open4id-community/ios-sdk/issues>.
 8. [Session management](#session-management)
 9. [Player account flows](#player-account-flows)
 10. [Delegate verification to your server (server callback)](#delegate-verification-to-your-server-server-callback)
-11. [Error handling](#error-handling)
-12. [Token storage](#token-storage)
-13. [Security model](#security-model)
-14. [Objective-C and Unity notes](#objective-c-and-unity-notes)
-15. [Troubleshooting](#troubleshooting)
+11. [Payments and entitlements (headless)](#payments-and-entitlements-headless)
+12. [Error handling](#error-handling)
+13. [Token storage](#token-storage)
+14. [Security model](#security-model)
+15. [Objective-C and Unity notes](#objective-c-and-unity-notes)
+16. [Troubleshooting](#troubleshooting)
 
 ## Requirements
 
 | Item | Requirement |
 |------|-------------|
-| Minimum deployment target | iOS 16.0 |
+| Minimum deployment target | iOS 16.0, macOS 13.0 |
 | Toolchain | Swift 5.9+ toolchain (a current Xcode release) |
 | Dependencies | None — Foundation, CryptoKit, Security, and URLSession only |
 
@@ -57,15 +58,15 @@ In Xcode: **File → Add Package Dependencies…** and enter:
 https://github.com/open4id-community/ios-sdk
 ```
 
-Use the version rule **Up to Next Major** from `0.4.0`. SDK releases are
-tagged with plain semver tags (`v0.4.0` on the mirror repo), which is what
+Use the version rule **Up to Next Major** from `0.5.0`. SDK releases are
+tagged with plain semver tags (`v0.5.0` on the mirror repo), which is what
 SPM resolves.
 
 In `Package.swift`, the equivalent is:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/open4id-community/ios-sdk", from: "0.4.0")
+    .package(url: "https://github.com/open4id-community/ios-sdk", from: "0.5.0")
 ]
 ```
 
@@ -82,7 +83,7 @@ then:
 
 ```bash
 shasum -a 256 -c SHA256SUMS          # optional integrity check
-unzip Open4IDSDK-0.4.0.xcframework.zip -d ~/open4id-ios-sdk
+unzip Open4IDSDK-0.5.0.xcframework.zip -d ~/open4id-ios-sdk
 ```
 
 In Xcode: **General → Frameworks, Libraries, and Embedded Content →
@@ -112,7 +113,10 @@ Open4ID producer console:
 Also register the custom scheme in Xcode so the OS routes the redirect back
 to your app: **Target → Info → URL Types → URL Schemes** — set the **URL
 Scheme** to your bundle id (e.g. `com.example.game`) and leave **Role** as
-`Viewer`.
+`Viewer`. On macOS, add the same scheme under **Target → Info → URL Types**
+(or `CFBundleURLTypes` in `Info.plist`); AppKit delivers the callback through
+your app delegate's `application(_:open:)` / `NSAppleEventManager` handling,
+so forward it to the SDK the same way an iOS host forwards the URL.
 
 Finally, in **Signing & Capabilities**, enable **Keychain Sharing** if you
 opt into the Keychain session store, and ensure the app target includes the
@@ -150,6 +154,10 @@ Parameters:
 - **endpoint** — optional override; leave at the default
   `https://id.open4id.com/api` for production. A custom endpoint is only
   valid when the environment is not `production`.
+- **bundleId** — your app's bundle id. Enable the matching `ios` or `macos`
+  platform entry for the application in the Publisher Portal. The SDK derives
+  the wire `platform` from the build target: native macOS sends `macos`,
+  while Mac Catalyst and iOS send `ios`. You never pass `platform` yourself.
 
 After `configure` succeeds, `getConfig()` returns a **redacted** snapshot of
 the effective settings (the SDK key is masked to its last four characters).
@@ -168,9 +176,11 @@ if let snapshot = auth.getConfig() {
 Follow these steps in order:
 
 1. **Bootstrap** — performs the native application handshake
-   (`platform: "ios"` + `bundle_id`). It fetches app metadata, provider
+   (`platform: "ios"` + `bundle_id` on iOS and Mac Catalyst, `platform:
+   "macos"` + `bundle_id` on native macOS). It fetches app metadata, provider
    availability, and login readiness, and drives the provider buttons in
-   the UI. Re-run it on each app launch.
+   the UI. Re-run it on each app launch. A `401` here usually means the
+   platform entry or bundle id does not match the application configuration.
 
 2. **Pick a flow** — password, guest, or one of the social flows.
 
@@ -331,6 +341,18 @@ let close = showOpen4IDLoginDialog(on: self /* UIViewController */, model: authM
 close()
 ```
 
+### AppKit hosting (macOS sheet)
+
+```swift
+let close = showOpen4IDLoginDialog(on: self /* NSViewController */, model: authModel)
+// later:
+close()
+```
+
+The macOS helper presents the same card as a sheet over the given view
+controller. SwiftUI hosts use the same `.open4IDLoginSheet(isPresented:
+model:)` modifier on both platforms.
+
 ### Pure Objective-C hosting
 
 Since the SwiftUI view itself is not reachable from Objective-C, the
@@ -341,7 +363,7 @@ XCFramework's generated header) that presents the same dialog:
 // Keep the Bootstrap from [auth bootstrap:...] — it drives the
 // provider list (nil hides providers/guest until re-bound).
 Open4IDLoginDialogHandleObjC *handle = [Open4IDLoginDialogObjC
-    showOn:self                                  // any UIViewController
+    showOn:self                                  // UIViewController, or NSViewController on macOS
     client:auth                                  // configured headless client
     bootstrap:self.lastBootstrap
     localeTag:@"en"                              // en/vi; nil = en
@@ -369,7 +391,8 @@ and code exchange.
 
 `signInWithApple`, `signInWithGitHub`, and `signInWithFacebook` use
 `ASWebAuthenticationSession` over the Open4ID Portal bridges. All are
-first-party APIs on iOS, so the SDK owns the browser round-trip itself:
+first-party APIs on iOS and macOS, so the SDK owns the browser round-trip
+itself:
 
 - GitHub scopes: `read:user user:email`; posts `github_code` + the
   registered `github_redirect_uri`.
@@ -393,7 +416,7 @@ Before using web-based providers, configure the presentation anchor and
 optionally ephemeral sessions:
 
 ```swift
-auth.setPresentationAnchor { /* getter returning your UIWindow */ }
+auth.setPresentationAnchor { /* getter returning your UIWindow (iOS) or NSWindow (macOS) */ }
 auth.setPrefersEphemeralWebSessions(true) // no cookie carry-over; recommended
 ```
 
@@ -526,6 +549,160 @@ let unsubscribe = auth.onServerCallbackError { error in
 }
 ```
 
+## Payments and entitlements (headless)
+
+The SDK never sells anything. It has no purchase sheet and no store
+dependency: your game buys through StoreKit, Unity IAP, or RevenueCat, then
+hands the resulting proof to the SDK. Core API re-verifies that proof with
+Apple before granting an entitlement, so a client claim is only a hint and
+cannot unlock content on its own. On iOS and macOS only `app_store` proofs are
+submitted; the Android SDK owns `google_play`.
+
+### Products
+
+The public catalog arrives with `bootstrap()` — reading it makes no network
+call. It contains product IDs, platform, type, and entitlement keys; never
+prices, credentials, or player data.
+
+```swift
+let catalog = auth.payments().products()
+guard catalog.enabled else { return }   // shop closed
+for product in catalog.forPlatform(PaymentProvider.appStore) {
+    print(product.productId, product.type, product.entitlements)
+}
+let premium = catalog.product("com.example.premium")
+```
+
+The catalog fails closed: before bootstrap, when your application has no
+store enabled, or when the block is missing/malformed,
+`catalog.enabled == false` with an empty list.
+
+### Verify a purchase
+
+Submit the StoreKit 2 `jwsRepresentation` after StoreKit reports a verified
+transaction. There is no `verifyReceipt` fallback in the Core API contract.
+
+```swift
+do {
+    let proof = try TransactionProof.appStore(
+        productId: transaction.productID,
+        jwsRepresentation: transaction.jwsRepresentation)
+    let entitlements = try await auth.payments().verifyTransaction(proof)
+} catch {
+    // typed SdkError; see Error handling
+}
+```
+
+The call is bound to the signed-in session's bearer token, so a proof can
+never be applied to another player. The JWS is sent once, never logged, and
+never persisted; `TransactionProof.description` redacts it.
+
+If there is no session, the SDK signs in as a guest first when your
+application allows guest login, so an anonymous purchase works without host
+code. With guest login disabled the call throws
+`client.auth.not_authenticated`.
+
+Ownership is single-owner and only moves away from an anonymous guest: if the
+purchase is already bound to a player with no email or social identity, a
+store-verified proof here transfers it to the current player and the previous
+owner loses it. Once the owner has an email or social identity the purchase is
+sticky: this call throws `SdkConflictError` (`140006`,
+`client.payment.owned_by_another_account`) and changes nothing, so ask the
+player to sign in as the owning account.
+
+### Restore and read entitlements
+
+Restore is what the app calls at startup and behind a "Restore purchases"
+button. It recovers a purchase in both lifecycle cases: a restart with the
+stored session recomputes the same player's rows, and a reinstall starts as a
+fresh guest whose anonymous binding is moved by a store-verified proof. To
+cover the second case without collecting proofs at every call site, register a
+proof source once:
+
+```swift
+final class StoreProofs: PaymentProofSource {
+    func collectProofs(_ completion: @escaping ([TransactionProof], Error?) -> Void) {
+        Task {
+            var proofs: [TransactionProof] = []
+            for await entry in Transaction.currentEntitlements {
+                if case .verified(let transaction) = entry {
+                    proofs.append(try TransactionProof.appStore(
+                        productId: transaction.productID,
+                        jwsRepresentation: transaction.jwsRepresentation))
+                }
+            }
+            completion(proofs, nil)
+        }
+    }
+}
+auth.payments().proofSource = StoreProofs()
+```
+
+The source runs off your thread within a 10 s bound and the SDK submits at
+most 20 proofs; extras and `nil` entries are dropped. A source error, timeout,
+or throw never fails the restore: the ledger is still recomputed and
+`result.proofsUnavailable` is `true`, so show a retry instead of hiding a paid
+feature.
+
+```swift
+// Ledger recompute plus the proofs the registered source collected.
+let result = try await auth.payments().restore()
+print(result.entitlements.count, result.verified, result.rejected,
+      result.conflict, result.proofsUnavailable)
+
+// Optional explicit proofs (max 20 per call) — always win over the source.
+// An invalid proof counts as `rejected`; it does not fail the restore. A
+// proof that resolves to another anonymous player's binding transfers it to
+// the current player, while a proof owned by a credentialed account counts
+// as `conflict` (result.hasConflict) and changes nothing.
+let repaired = try await auth.payments().restore(proofs: [proof])
+
+// Re-read the current rows at any time (ledger only, no store call).
+let snapshot = try await auth.entitlements().refresh()
+let unlocked = auth.entitlements().has("premium")   // active or grace only
+let history = auth.entitlements().list()            // includes expired/revoked
+let unsubscribe = auth.entitlements().onChanged { snapshot in
+    // fires on verify, restore, refresh, sign-in, and sign-out
+}
+```
+
+Entitlement states are `active`, `grace`, `expired`, and `revoked`. Only
+`active` and `grace` are usable; expired and revoked rows stay in `list()`
+so you can show history. `expiresAt` is `nil` for non-expiring one-time
+grants. The device stores the session and never the grants: the in-memory
+snapshot is `nil` on a cold start until the first read and is cleared whenever
+the signed-in player changes or signs out, so one player's grants never leak
+into another session. Treat a missing snapshot as **unknown**, not as "not
+purchased".
+
+Payment calls keep their own token fresh: `verifyTransaction`,
+`restore`, and `entitlements().refresh()` rotate a stale access token
+through `ensureSession` first, so a session older than the 900 s token
+lifetime (a store sheet left open, an idle game) still works instead of
+throwing `auth.token.invalid`.
+
+Every method also has an Objective-C completion-handler twin
+(`verifyTransaction(_:completion:)`, `restore(_:)`,
+`restore(proofs:completion:)`, `refresh(_:)`), and `PaymentProofSource` is an
+`@objc` protocol so an Objective-C host can implement the proof source too.
+
+### Consumables
+
+Both stores sell consumables now. The catalog parses a `consumable` row
+(`isConsumable`, empty `entitlements`) — a consumable that names an
+entitlement is still rejected. `verifyConsumable` with an
+`TransactionProof.appStore(productId:jwsRepresentation:)` runs the full App
+Store delivery: the server re-verifies the JWS, records the delivery on the
+Open4ID ledger (Apple has no server-side consume, so "consumed" lives on the
+ledger and the receipt's `already_delivered` state keeps a re-verified JWS
+from re-delivering), and answers a `ConsumableReceipt`. The game grants items
+keyed by `receipt.transactionRef` and grants nothing unless the state is
+`delivered` or `already_delivered`; `pending` means retry the verify, and
+`refunded` means the purchase was reversed. `verifyTransaction` still works
+for entitlement products and skips the entitlement publish whenever the
+response carries a `delivery` block, so a consumable payload cannot clear the
+cached snapshot.
+
 ## Error handling
 
 The SDK exposes a typed error hierarchy with **stable keys and integer
@@ -536,8 +713,11 @@ can change between minor versions:
 |------------|------|---------|
 | `SdkValidationError` | `100003` | Client validation failure; `fieldErrors` maps unsafe fields (e.g. `appId`, `redirectUri`). |
 | `SdkAuthError` | `110003` | Invalid key/credentials (`110005`), email verification required (`120001`), token failures. |
+| `SdkNotFoundError` | `130004` | Unknown payment transaction or entitlement. |
+| `SdkConflictError` | `140006` | Purchase bound to another credentialed account (`client.payment.owned_by_another_account`); restore reports it as `conflict` instead. |
 | `SdkRateLimitedError` | `150001` | Rate limit; carries `retryAfterSec` (-1 when the server did not specify). |
 | `SdkUnavailableError` | `160001` | Core API or transport unavailable (timeout, HTTP 5xx, connectivity). |
+| `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. Subclasses `SdkUnavailableError`. |
 | `SdkInternalError` | `170001` | Unexpected internal failure. |
 | `SdkNotImplementedError` | `-1` | Method awaiting its implementation phase (rare; only ahead of a shipped feature). |
 
