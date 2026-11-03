@@ -1,12 +1,95 @@
 # Changelog
 
-All notable changes to the Open4ID iOS SDK are documented here.
+All notable changes to the Open4ID iOS/macOS SDK are documented here.
 Distribution: SwiftPM resolves the plain-semver `v<version>` tag on the
 GitHub SPM mirror
 (`https://github.com/open4id-community/ios-sdk`); the prebuilt
 `Open4IDSDK-<version>.xcframework.zip` lives in the monorepo's
 `sdks/ios/dist/` with `SHA256SUMS` for Objective-C / binary consumers.
 The monorepo tags every release `ios-v<version>` (lineage marker).
+
+## 0.5.0
+
+- **App Store consumables**: the shared catalog accepts an `app_store`
+  `consumable` row (empty `entitlements`; a consumable naming an entitlement
+  is still rejected in either store), `verifyConsumable(_:)` now substantiates
+  an `TransactionProof.appStore` proof and returns `ConsumableReceipt` (the
+  `@objc` twin calls back with the receipt), and `verifyTransaction` keeps
+  skipping the entitlement publish when the response carries a `delivery`
+  block so a consumable payload cannot wipe the cached snapshot. Apple has no
+  server-side consume, so the Open4ID ledger is the only consume record; the
+  receipt's `transaction_ref` is the game's idempotency key, and the
+  `already_delivered` replay guard keeps a re-verified JWS from re-delivering.
+  Google Play consumable consumption, server-side store acknowledge, and
+  partial-refund reconciliation remain Android-only; see the Android SDK
+  README.
+- **Headless payments and entitlements**: new `Open4IDPayments`
+  (`payments()`), `Open4IDEntitlements` (`entitlements()`), and the
+  `PaymentsTypes` value types, with `@objc` bridges matching the existing
+  Objective-C surface. The SDK never opens a purchase sheet and adds no
+  package dependency: the game buys through StoreKit, Unity IAP, or
+  RevenueCat and forwards the StoreKit 2 `jwsRepresentation` with
+  `verifyTransaction(TransactionProof.appStore(...))`. Core API
+  re-verifies the JWS with Apple before granting anything; there is no
+  `verifyReceipt` fallback.
+- **Entitlement snapshot**: `entitlements().refresh()` reads the
+  server-derived rows, `has(_:)` is true only for `active`/`grace`, and
+  `list()` keeps expired/revoked history. The snapshot is cleared when
+  the signed-in player changes or signs out.
+- **Catalog from bootstrap**: `payments().products()` returns the public
+  `payments` block (product id, platform, type, entitlement keys) without
+  a network call. A missing or malformed block yields a disabled catalog,
+  never `nil`.
+- **Restore**: `payments().restore()` recomputes from the ledger;
+  `restore(proofs:)` accepts up to 20 optional proofs and reports
+  `verified`/`rejected` counts plus `conflict` (valid proof, purchase owned
+  by another credentialed account) with `hasConflict`.
+- **Restore proof source**: `payments().proofSource` registers a
+  `PaymentProofSource` (an `@objc` protocol) backed by the StoreKit client the
+  host already owns, so `restore()` also submits the purchases StoreKit
+  reports (`Transaction.currentEntitlements`, optionally after
+  `AppStore.sync()`). One call then recovers a purchase both after a restart
+  (stored session) and after a reinstall (fresh guest, same Apple ID), and the
+  SDK keeps its no-dependency rule. A source error or the 10 s bound degrades
+  to a ledger-only restore and sets `RestoreResult.proofsUnavailable`; explicit
+  `restore(proofs:)` never consults the source, and `entitlements().refresh()`
+  stays the ledger-only read.
+- **Guest purchases**: `verifyTransaction` and `restore` sign in as a guest
+  automatically when there is no session and the application allows guest
+  login, so an anonymous purchase works without host code. With guest login
+  disabled the call throws `client.auth.not_authenticated`.
+- **Store-account restore**: a store-verified proof moves the purchase only
+  while the current owner is still an anonymous guest, so a reinstall or a
+  fresh guest on the same Apple ID restores what it paid for. Once the owner
+  has an email or social identity the purchase is sticky: verify throws
+  `SdkConflictError` and restore reports `conflict`, so a shared Apple ID
+  cannot take a grant away from the paying account.
+- **Proof hygiene**: `TransactionProof.description` redacts the JWS, and
+  the SDK never logs or persists proof material.
+- **Token freshness**: every payment call (`verifyTransaction`, `restore`,
+  `entitlements().refresh()`) rotates a stale access token through
+  `ensureSession` first, so a session older than the 900 s token lifetime
+  no longer fails with `auth.token.invalid` — the case for a store sheet
+  left open past the token's life.
+- **Native macOS**: the same package now targets macOS 13+. A native macOS
+  build asserts `platform: "macos"` with `bundle_id` on bootstrap and every
+  player request (Mac Catalyst keeps `ios`), the AppKit login helpers present
+  the dialog as a sheet, and `Scripts/build-xcframework.sh` emits a macOS
+  slice alongside the iOS device/simulator slices. Enable the `macos`
+  platform in the Publisher Portal for the Mac app's bundle id. The macOS App
+  Store IAP path is live-verified end to end with `examples/macos-sdk-minimal`
+  (2026-11-02).
+- **New typed errors**: `SdkStoreUnavailableError` (`160003`, retryable, still
+  matches `SdkUnavailableError`), `SdkNotFoundError` (`130004`),
+  `SdkConflictError` (`140006`, `client.payment.owned_by_another_account`),
+  plus field-level validation errors for proof submissions.
+- **Publisher binaries**: `Open4IDSDK-0.5.0.xcframework.zip` in
+  `sdks/ios/dist/` — the iOS device, iOS simulator, and macOS slices, built
+  with `BUILD_LIBRARY_FOR_DISTRIBUTION` swiftinterfaces; this is the first
+  release that ships the macOS slice.
+- **Tag scheme note**: the monorepo tags this release `ios-v0.5.0` (lineage);
+  SPM consumers resolve the plain `v0.5.0` on the GitHub SPM mirror
+  `open4id-community/ios-sdk`.
 
 ## 0.4.0
 
