@@ -4,6 +4,7 @@ let package = Package(
     name: "Open4IDSDK",
     platforms: [
         .iOS(.v16)
+        .macOS(.v13)
     ],
     products: [
         .library(name: "Open4IDSDK", targets: ["Open4IDSDK"])
