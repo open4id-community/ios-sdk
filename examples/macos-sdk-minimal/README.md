@@ -1,9 +1,11 @@
 # macOS SDK Minimal IAP Example
 
 Minimal SwiftUI **macOS** app that verifies Open4ID **App Store IAP**
-end to end with the headless SDK (`sdks/ios`). It is the macOS twin of
-`examples/ios-sdk-minimal`, scoped to **payments only** — there is no login,
-social, session, or account UI.
+end to end with the released headless SDK. It resolves the SDK from the
+published GitHub Swift package
+(`https://github.com/open4id-community/ios-sdk`, `from: "0.5.0"`), not from a
+local checkout. It is the macOS twin of `examples/ios-sdk-minimal`, scoped to
+**payments only** — there is no login, social, session, or account UI.
 
 > **Status 2026-11-02:** the macOS App Store IAP path is live-verified end to
 > end against Core API (server-side JWS verification).
@@ -26,8 +28,10 @@ session a purchase needs), then buy/verify a catalog row through
 ## Requirements
 
 - macOS 13+ with Xcode 15+.
-- The app references the SDK as a **local Swift package** (`../../sdks/ios`) —
-  no registry dependency.
+- The app resolves `Open4IDSDK` from the published GitHub Swift package
+  `https://github.com/open4id-community/ios-sdk`, rule **Up to Next Major**
+  from `0.5.0` (pinned in `Package.resolved`). Run once with network access so
+  Xcode fetches the binary XCFramework; no local SDK checkout is needed.
 
 ## Build & run
 
