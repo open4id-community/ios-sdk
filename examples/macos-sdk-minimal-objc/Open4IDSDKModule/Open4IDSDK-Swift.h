@@ -1,0 +1,1 @@
+../../../Open4IDSDK-0.6.0.xcframework/macos-arm64_x86_64/Headers/Open4IDSDK-Swift.h

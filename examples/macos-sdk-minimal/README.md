@@ -84,8 +84,9 @@ The whole flow needs no host store code. The sample renders the shop itself:
 > while another node **sharing the same database** verifies fine means the
 > node itself is missing its pinned Apple root — the release must ship
 > `priv/payment/apple_root_ca_g3.pem` (missing or mismatched file answers
-> 503 before the JWS is read). For local-stack runs
-> set `OPEN4ID_ENDPOINT` = `http://localhost:10001/api` (scheme **Run →
+> 503 before the JWS is read). To verify against a different Open4ID
+> deployment (one where the application's App Store section is configured),
+> set `OPEN4ID_ENDPOINT` accordingly (scheme **Run →
 > Arguments → Environment Variables**, or edit the Endpoint field). A green
 > server-side verify then still needs a real sandbox purchase — see "What
 > the local StoreKit config does and does not prove" below.
@@ -161,7 +162,7 @@ point them at your own registered app (see the env overrides below).
 | App ID | dev application `app_4a17c6…` |
 | Environment | `development` |
 | Public SDK key | dev key (must allow `macos`) |
-| Endpoint | `https://id.open4id.com/api` (local dev node `http://localhost:10001/api` available for local-stack runs — see the note above) |
+| Endpoint | `https://id.open4id.com/api` (editable in the UI or via `OPEN4ID_ENDPOINT` — see the note above) |
 | Bundle ID | `com.open4id.example.ios` (universal purchase: same bundle id as the iOS app) |
 | Redirect URI | `com.open4id.example.ios://open4id/callback` (required by `configure`, unused by IAP) |
 

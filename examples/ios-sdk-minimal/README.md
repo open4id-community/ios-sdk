@@ -29,12 +29,12 @@ The app **auto-configures and bootstraps on launch** with the development
 application's fixtures (the sample's bundle ID `com.open4id.example.ios` is
 registered on it, native binding `platform: "ios"`), defaulting to the
 production endpoint `https://id.open4id.com/api` and production Portal
-origin `https://app.open4id.com`. For local-stack runs, launch-time
-environment overrides pre-fill those fields (no UI editing needed):
+origin `https://app.open4id.com`. Launch-time environment overrides pre-fill
+those fields (no UI editing needed) — point them at your own deployment:
 
 ```sh
-SIMCTL_CHILD_OPEN4ID_ENDPOINT=http://localhost:10001/api
-SIMCTL_CHILD_OPEN4ID_PORTAL_ORIGIN=http://localhost:4200
+SIMCTL_CHILD_OPEN4ID_ENDPOINT=https://your-node.example.com/api
+SIMCTL_CHILD_OPEN4ID_PORTAL_ORIGIN=https://your-portal.example.com
 SIMCTL_CHILD_OPEN4ID_AUTOTEST=facebook   # auto-run one web flow after bootstrap
 ```
 
