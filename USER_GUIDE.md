@@ -33,12 +33,14 @@ issue at <https://github.com/open4id-community/ios-sdk/issues>.
 8. [Session management](#session-management)
 9. [Player account flows](#player-account-flows)
 10. [Delegate verification to your server (server callback)](#delegate-verification-to-your-server-server-callback)
-11. [Payments and entitlements (headless)](#payments-and-entitlements-headless)
-12. [Error handling](#error-handling)
-13. [Token storage](#token-storage)
-14. [Security model](#security-model)
-15. [Objective-C and Unity notes](#objective-c-and-unity-notes)
-16. [Troubleshooting](#troubleshooting)
+11. [Payments the easy way (built-in store)](#payments-the-easy-way-built-in-store)
+12. [Payments and entitlements (headless)](#payments-and-entitlements-headless)
+13. [Payments in Objective-C](#payments-in-objective-c)
+14. [Error handling](#error-handling)
+15. [Token storage](#token-storage)
+16. [Security model](#security-model)
+17. [Objective-C and Unity notes](#objective-c-and-unity-notes)
+18. [Troubleshooting](#troubleshooting)
 
 ## Requirements
 
@@ -232,12 +234,18 @@ do {
 ### Objective-C
 
 Every `async` Swift API ships a completion-handler twin callable from
-Objective-C. Errors surface as `NSError` with domain `Open4IDSDK`, code set
+Objective-C. Import the SDK's generated ObjC interface header first — the
+direct-header import works in every consumption path (SPM package and
+XCFramework); `@import Open4IDSDK;` works only in some SPM setups (pure
+Objective-C targets with a source package), so prefer the header import.
+Errors surface as `NSError` with domain `Open4IDSDK`, code set
 to the integer error code, and the stable key in `userInfo[@"key"]`
 (`client.auth.*`, `system.*`, `sdk.*`):
 
 ```objc
-@import Open4IDSDK;
+#import <Open4IDSDK/Open4IDSDK-Swift.h>
+// SPM builds the product as a static library; the generated header sits on
+// the header search path, so the quoted form also works: #import "Open4IDSDK-Swift.h"
 
 Open4IDAuthClient *auth = [[Open4IDAuthClient alloc] init];
 NSError *error = nil;
@@ -549,10 +557,70 @@ let unsubscribe = auth.onServerCallbackError { error in
 }
 ```
 
+## Payments the easy way (built-in store)
+
+Since 0.6.0 the SDK ships the StoreKit 2 glue that hosts previously wrote by
+hand (the sample apps' `StoreKitBridge`): a built-in headless store client.
+One client call enables everything — products loaded from the Open4ID catalog
+request, the full purchase pipeline, and a self-sufficient restore. The shop
+UI stays yours: render the rows the SDK returns however your game wants.
+
+```swift
+let auth = Open4IDAuthClient()
+try auth.configure(/* ... */)
+let bootstrap = try await auth.bootstrap()
+
+// One call: built-in StoreKit 2 store. It reads the app_store rows of the
+// Open4ID catalog (the bootstrap snapshot), resolves StoreKit products,
+// registers the restore proof source, and listens on Transaction.updates —
+// no host store code.
+let store = auth.storeKitPayments()
+
+// Ask-to-buy approvals and cross-device buys complete outside a direct
+// purchase() call; the store verifies and finishes them automatically and
+// reports the outcome here (main queue). Optional — leave unset if you
+// don't need to observe them.
+store.onTransactionUpdate = { outcome in
+    if outcome.isVerified { /* grant landed; refresh your entitlements view */ }
+}
+
+// Shop rows: catalog product + StoreKit display name/price (or
+// isResolvable == false when the store has no such product yet). Render
+// these in your own shop UI.
+let rows = try await store.loadProducts()
+
+// One-call purchase: StoreKit sheet → JWS proof → verifyTransaction /
+// verifyConsumable → Transaction.finish(). Grant from the outcome. Pass the
+// catalog row you rendered the Buy button from — the pipeline uses it as-is;
+// `purchase(productId:)` is the by-id variant (it refreshes the bootstrap
+// snapshot once when the snapshot does not know the id).
+let outcome = try await store.purchase(row.product)
+if outcome.isVerified {
+    // entitlements: [Entitlement] (one_time/subscription) — also published
+    // to the entitlement snapshot; receipt: ConsumableReceipt? (consumable).
+}
+// outcome.isCancelled / outcome.isPending are statuses, not errors.
+
+// Restore works out of the box (the built-in proof source is registered).
+let result = try await store.restore()
+```
+
+Every method also has an `@objc` completion twin
+(`loadProducts(_:)`, `purchase(productId:completion:)`,
+`purchase(_:completion:)`, `restore(_:)`), so Objective-C and Unity hosts get
+the same feature without a Swift file — StoreKit 2 is a Swift-only API, and
+the SDK now owns that side.
+
+The headless surface (`payments()` / `entitlements()`) is unchanged — the
+built-in store calls exactly those APIs, and hosts that own their StoreKit
+integration (Unity IAP, RevenueCat) keep working as before.
+
 ## Payments and entitlements (headless)
 
-The SDK never sells anything. It has no purchase sheet and no store
-dependency: your game buys through StoreKit, Unity IAP, or RevenueCat, then
+The headless payments surface is the contract the built-in store (previous
+section) is written on, and the path for hosts that own their store client
+(Unity IAP, RevenueCat, a custom StoreKit bridge). The SDK verifies nothing
+locally and grants nothing by itself: your game buys through a store, then
 hands the resulting proof to the SDK. Core API re-verifies that proof with
 Apple before granting an entitlement, so a client claim is only a hint and
 cannot unlock content on its own. On iOS and macOS only `app_store` proofs are
@@ -684,7 +752,9 @@ throwing `auth.token.invalid`.
 Every method also has an Objective-C completion-handler twin
 (`verifyTransaction(_:completion:)`, `restore(_:)`,
 `restore(proofs:completion:)`, `refresh(_:)`), and `PaymentProofSource` is an
-`@objc` protocol so an Objective-C host can implement the proof source too.
+`@objc` protocol so an Objective-C host can implement the proof source too —
+see [Payments in Objective-C](#payments-in-objective-c) for the full ObjC
+walkthrough.
 
 ### Consumables
 
@@ -703,6 +773,132 @@ for entitlement products and skips the entitlement publish whenever the
 response carries a `delivery` block, so a consumable payload cannot clear the
 cached snapshot.
 
+## Payments in Objective-C
+
+The whole payments surface is callable from Objective-C — same classes,
+same behavior, `@objc` completion-handler twins instead of `async`/`throws`.
+This section mirrors [Payments and entitlements](#payments-and-entitlements-headless)
+in ObjC; the verification rules, guest sign-in, and ownership semantics are
+identical and are not repeated here.
+
+### Import and namespaces
+
+```objc
+#import <Open4IDSDK/Open4IDSDK-Swift.h>
+
+// Get the namespaces once; the objects are stable for the client's lifetime.
+Open4IDPayments *payments = auth.payments;
+Open4IDEntitlements *entitlements = auth.entitlements;
+```
+
+Import notes:
+
+- The direct-header import (`Open4IDSDK-Swift.h`) is the form that works in
+  every consumption path: the XCFramework ships it in every slice
+  (`Headers/Open4IDSDK-Swift.h`), and an SPM build exposes it on the header
+  search path. `@import Open4IDSDK;` compiles only in some SPM setups (a
+  pure-Objective-C target consuming a source package); a mixed ObjC/Swift
+  target fails to find the module, so prefer the header import.
+- The XCFramework ships static libraries plus the generated header — there
+  is no Clang module, so `@import` cannot resolve against it.
+- `PaymentProvider` (the `google_play` / `app_store` string constants) is a
+  Swift-only namespace; from ObjC pass the plain strings `@"app_store"` /
+  `@"google_play"`.
+
+### Catalog, proofs, and verify
+
+```objc
+// Catalog snapshot from bootstrap — no network call.
+PaymentCatalog *catalog = [payments products];
+if (catalog.enabled) {
+    for (PaymentProduct *product in [catalog forPlatform:@"app_store"]) {
+        NSLog(@"%@ [%@] entitlements=%@", product.productId, product.type,
+              product.entitlements);
+    }
+}
+PaymentProduct *premium = [catalog product:@"com.example.premium"];
+
+// Build a proof from the StoreKit 2 JWS (see the StoreKit note below).
+NSError *proofError = nil;
+TransactionProof *proof = [TransactionProof
+    appStoreWithProductId:transaction.productID
+      jwsRepresentation:jws error:&proofError];
+
+// One-time / subscription: grants entitlements.
+[payments verifyTransaction:proof completion:^(NSArray<Entitlement *> * _Nullable granted,
+                                               NSError * _Nullable error) {
+    if (error) { /* NSError, domain Open4IDSDK */ return; }
+    for (Entitlement *entitlement in granted) {
+        NSLog(@"%@ [%@]", entitlement.key, entitlement.state);
+    }
+}];
+
+// Consumable: grants nothing; act on the delivery receipt.
+[payments verifyConsumable:proof completion:^(ConsumableReceipt * _Nullable receipt,
+                                              NSError * _Nullable error) {
+    if (error) { return; }
+    if (receipt.isDelivered) {
+        // Grant receipt.quantity items keyed by receipt.transactionRef.
+    } else if (receipt.isAlreadyDelivered) {
+        // Replay — do not grant again.
+    }
+    // isPending → retry the verify; isRefunded → purchase reversed.
+}];
+```
+
+`RestoreResult` fields read the same from ObjC (`verified`, `rejected`,
+`conflict`, `proofsUnavailable`, `hasConflict`), as do the entitlement row
+fields (`key`, `state`, `source`, `productId`, `type`, `grantedAt`,
+`expiresAt`, `isUsable`). Explicit-proofs restore uses
+`restoreWithProofs:completion:` (max 20 proofs per call).
+
+### Restore and entitlement reads
+
+```objc
+// Register the proof source once (protocol is @objc — implement it in ObjC).
+payments.proofSource = myProofSource;
+
+[payments restore:^(RestoreResult * _Nullable result, NSError * _Nullable error) {
+    if (error) { return; }
+    NSLog(@"verified=%ld rejected=%ld conflict=%ld noProofs=%d",
+          (long)result.verified, (long)result.rejected, (long)result.conflict,
+          result.proofsUnavailable);
+}];
+
+// Ledger-only reads.
+[entitlements refresh:^(EntitlementSnapshot * _Nullable snapshot,
+                        NSError * _Nullable error) { /* … */ }];
+BOOL unlocked = [entitlements has:@"premium"];   // active or grace only
+NSArray<Entitlement *> *history = [entitlements list];
+void (^unsubscribe)(void) = [entitlements onChanged:^(EntitlementSnapshot * _Nullable snapshot) {
+    // fires on verify, restore, refresh, sign-in, and sign-out
+}];
+```
+
+### StoreKit 2 is Swift-only — plan for one small bridge file
+
+The `PaymentProofSource` protocol and every verify call are ObjC, but the
+proof itself — the StoreKit 2 `jwsRepresentation` — comes from a Swift-only
+API: the StoreKit framework's ObjC headers expose only the legacy `SK*`
+types, and none of them carries the JWS (there is no `verifyReceipt`
+fallback). A pure-ObjC store client therefore cannot produce a usable proof.
+Two ways out, both Apple-supported:
+
+- Your project already has Swift in it (or uses Unity IAP / RevenueCat) —
+  hand the `jwsRepresentation` string over the existing bridge and pass it to
+  `[TransactionProof appStoreWithProductId:jwsRepresentation:error:]`; or
+- keep one small Swift file that wraps StoreKit 2 behind `@objcMembers`
+  types, exactly what the sample
+  [`examples/macos-sdk-minimal-objc`](../../examples/macos-sdk-minimal-objc)
+  does (`StoreKitBridge.swift`) while the UI, configuration, and every SDK
+  call stay in ObjC.
+
+Threading: the completion twins may fire on a background executor, so hop to
+the main queue (`dispatch_async(dispatch_get_main_queue(), …)`) before
+touching UIKit/AppKit in a completion body. `collectProofs:` may call its
+completion on any thread — the SDK bounds the wait at 10 s and submits at
+most 20 proofs.
+
 ## Error handling
 
 The SDK exposes a typed error hierarchy with **stable keys and integer
@@ -717,7 +913,7 @@ can change between minor versions:
 | `SdkConflictError` | `140006` | Purchase bound to another credentialed account (`client.payment.owned_by_another_account`); restore reports it as `conflict` instead. |
 | `SdkRateLimitedError` | `150001` | Rate limit; carries `retryAfterSec` (-1 when the server did not specify). |
 | `SdkUnavailableError` | `160001` | Core API or transport unavailable (timeout, HTTP 5xx, connectivity). |
-| `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. Subclasses `SdkUnavailableError`. |
+| `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. Subclasses `SdkUnavailableError`. A `503` on **every** verify is not transient — on the App Store path it has two per-node causes: the Portal's Payments → App Store section not saved for the `(app, environment)` the client asserts (`bundle_id` empty or `notification_environment` invalid; a disabled provider or unknown product answers `400 invalid` instead), or the node missing its pinned Apple root (`priv/payment/apple_root_ca_g3.pem` must ship with the release — a missing/mismatched file answers 503 before the JWS is read; if another node sharing the database verifies fine, it is this one). The Vault key is not used by verification. |
 | `SdkInternalError` | `170001` | Unexpected internal failure. |
 | `SdkNotImplementedError` | `-1` | Method awaiting its implementation phase (rare; only ahead of a shipped feature). |
 
@@ -767,14 +963,26 @@ Pass the store at `configure`; switch the backend at runtime with
 - The XCFramework's generated header (`Open4IDSDK-Swift.h`) exposes all
   public model types — `AuthSession`, `UserInfo`, `Bootstrap`,
   `AuthDiscovery`, `ProviderRef`, `LoginReadiness`, `ServerCallback`,
-  `ServerCallbackReceipt`, `SessionSnapshot` — with properties readable
-  from Objective-C.
+  `ServerCallbackReceipt`, `SessionSnapshot`, and the payments set
+  (`PaymentCatalog`, `PaymentProduct`, `TransactionProof`, `Entitlement`,
+  `EntitlementSnapshot`, `RestoreResult`, `ConsumableReceipt`) — with
+  properties readable from Objective-C.
+- Import the generated header directly
+  (`#import <Open4IDSDK/Open4IDSDK-Swift.h>`); it is the one form that works
+  for both the SPM package and the XCFramework. The XCFramework ships no
+  Clang module, and `@import Open4IDSDK;` resolves only in some SPM setups
+  (pure Objective-C targets with a source package).
 - `RedactedConfig` (the return of `getConfig()`) is a nested Swift type and
   is not exposed to Objective-C; simply check `getConfig() != nil` to
   confirm configuration success.
 - The SwiftUI UI layer is not reachable from Objective-C directly; use the
   `Open4IDLoginDialogObjC` facade as shown in
   [Login dialog](#login-dialog-built-in-ui).
+- Auth flows end to end from a pure ObjC app: `examples/ios-sdk-minimal-objc`
+  (UIKit). Payments end to end on macOS with ObjC UI and SDK calls:
+  `examples/macos-sdk-minimal-objc` (AppKit; keeps one Swift file for the
+  Swift-only StoreKit 2 JWS bridge — see
+  [Payments in Objective-C](#payments-in-objective-c)).
 - For Unity/Unreal, write a thin ObjC/ObjC++ shim against the
   `Open4IDSDK.xcframework` surface and expose it to the engine through your
   normal bridge (the same pattern used by other Swift game SDKs); in-engine

@@ -16,6 +16,7 @@ through SwiftPM instead:
 | 0.3.3   | `Open4IDSDK-0.3.3.xcframework.zip` | `7537a1e3bcfa8235bf23d44a74b1b7b08f7b962d5cf9c943e4933d3ce18358f1` |
 | 0.4.0   | `Open4IDSDK-0.4.0.xcframework.zip` | `8a09740a9fe5b8c0707615d39b330b4bc42c2f1b5462b8046724f5896f0f2091` |
 | 0.5.0   | `Open4IDSDK-0.5.0.xcframework.zip` | `94e51e641657dcc61ad230d893c4d8deeffcf785862f04087f75e552b6d3930f` |
+| 0.6.0   | `Open4IDSDK-0.6.0.xcframework.zip` | `4cc5fa555d1f412b37a653b4e7a1fcf603eeb91f67e2eaec330d703b5223910c` |
 
 ## What is inside
 
@@ -29,7 +30,9 @@ monorepo's `Scripts/build-xcframework.sh` at the tagged commit:
   (includes the `Open4IDLoginDialogObjC` facade with its iOS
   `UIViewController` and macOS `NSViewController` overloads, the
   `Open4IDGoogleAuthorizationCodeProviding` provider protocol, and the
-  headless payments surface)
+  payments surface — the headless `payments()`/`entitlements()` API plus the
+  built-in StoreKit store (`storeKitPayments`, `Open4IDStoreKitPayments`,
+  `onTransactionUpdate`)
 - `Open4IDSDK.swiftmodule/` — module-stable `.swiftinterface` set
 
 ## How to verify and install
@@ -38,12 +41,12 @@ Grab the zip from the [latest release](https://github.com/open4id-community/ios-
 
 ```bash
 shasum -a 256 -c SHA256SUMS          # optional integrity check
-unzip Open4IDSDK-0.5.0.xcframework.zip -d ~/open4id-ios-sdk
+unzip Open4IDSDK-0.6.0.xcframework.zip -d ~/open4id-ios-sdk
 ```
 
 Then in Xcode: **General → Frameworks, Libraries, and Embedded Content →
 Add… → Add Other → Add Files…** and pick
-`~/open4id-ios-sdk/Open4IDSDK-0.5.0.xcframework` with **Embed & Sign** (for a
+`~/open4id-ios-sdk/Open4IDSDK-0.6.0.xcframework` with **Embed & Sign** (for a
 macOS target, Xcode selects the macOS slice automatically).
 
 Please read `USER_GUIDE.md` for usage.

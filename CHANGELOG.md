@@ -8,6 +8,60 @@ GitHub SPM mirror
 `sdks/ios/dist/` with `SHA256SUMS` for Objective-C / binary consumers.
 The monorepo tags every release `ios-v<version>` (lineage marker).
 
+## 0.6.0 (2026-11-04)
+
+- **Built-in StoreKit 2 payments store** (`PaymentsStoreKit.swift`): the
+  SDK now owns the store glue the example apps used to ship — the shop UI
+  stays host-owned (the SDK ships no shop view, matching the headless
+  design). One client call
+  — `auth.storeKitPayments()` (new stable namespace beside `payments()` /
+  `entitlements()`) — returns `Open4IDStoreKitPayments`, which
+  - loads the shop rows **from the SDK request**: the `app_store` rows of the
+    Open4ID catalog (the bootstrap snapshot via `payments().products()`)
+    joined with the StoreKit 2 products resolved for them
+    (`Open4IDStoreProduct`, `loadProducts()` — no hardcoded product ids, no
+    host-side catalog parsing);
+  - runs the **one-call purchase pipeline** `purchase(_:)` (pass the catalog
+    row the host rendered the Buy button from — no re-lookup, no stale
+    -snapshot failure) and the by-id variant `purchase(productId:)`, which
+    resolves the id against the Open4ID catalog and refreshes the bootstrap
+    snapshot once when it does not know the id: StoreKit sheet → local JWS
+    verification → `TransactionProof.appStore` → `verifyTransaction`
+    (one_time/subscription) or `verifyConsumable` (consumable) →
+    `Transaction.finish()` after a successful verify — answering an
+    `Open4IDPurchaseOutcome` whose `verified` / `cancelled` / `pending` kinds
+    are the only branch the host needs;
+  - **self-sufficient restore**: a built-in `PaymentProofSource` over
+    `Transaction.currentEntitlements` is registered on the payments
+    namespace automatically, so `payments().restore()` collects store proofs
+    with zero host wiring;
+  - **`Transaction.updates` listener**: the store iterates
+    `Transaction.updates` from creation (Apple's guidance: listen before any
+    purchase), so purchases completing outside a direct `purchase` call —
+    an approved ask-to-buy, a buy made on another device of a
+    universal-purchase app — are verified through the same pipeline,
+    finished, and reported via `onTransactionUpdate` (main queue, optional).
+    A transaction whose verify fails or whose product is not an `app_store`
+    catalog row stays unfinished, so StoreKit re-delivers it on the next
+    launch — nothing is granted unverified and nothing is lost.
+  Every method has an `@objc` completion twin, so Objective-C and Unity hosts
+  get the full feature with no Swift file (StoreKit 2 is a Swift-only API;
+  the SDK owns that side now). StoreKit is a system framework — still no
+  package dependency. The headless contract is unchanged; hosts with their
+  own store client keep using `payments()` directly.
+- **Examples**: `examples/macos-sdk-minimal` (SwiftUI) and
+  `examples/macos-sdk-minimal-objc` (AppKit) slimmed to the SDK's built-in
+  store — the per-app `Open4IDStoreKitBridge.swift` / `StoreKitBridge.swift`
+  are deleted and each sample renders its own Buy buttons from the
+  `Open4IDStoreProduct` rows the SDK returns (shop UI stays host-owned);
+  the ObjC sample is pure Objective-C (`@import Open4IDSDK;`) and resolves
+  the SDK from the local `sdks/ios` package like the iOS examples. The three
+  duplicated `Open4IDStoreConfig.storekit` fixtures are
+  deduplicated into one shared `examples/Open4IDStoreConfig.storekit` — the
+  path every example scheme already references (a development fixture for
+  local StoreKit testing only; normal SDK users never author one, and the
+  shop loads its products from the SDK catalog request).
+
 ## 0.5.0
 
 - **App Store consumables**: the shared catalog accepts an `app_store`
@@ -102,7 +156,19 @@ The monorepo tags every release `ios-v<version>` (lineage marker).
   Facebook OAuth dialog (pinned Graph API `v26.0`, `scope=email`) bound
   to the game callback URI — default the per-app Portal bridge
   `<portalOrigin>/facebook-callback/<bundleId>` for custom-scheme
-  redirects.
+  redirects or the origin-derived page for web redirects (an explicit
+  `callbackUri` override wins; loopback HTTP is accepted in
+  development) — then posts `facebook_code` + `facebook_redirect_uri`
+  to `POST /client/player_facebook_authorize` exactly like the GitHub
+  flow; the server exchanges the code with the Vault-backed App Secret
+  (appsecret_proof-guarded Graph calls) and answers the same
+  single-use PKCE-bound authorization code. Requires the Facebook
+  provider enabled in bootstrap (`LoginReadiness.facebook`);
+  cancelled / denied / timed-out / blocked sessions fail like the
+  GitHub flow. Provider-mark parity: the Facebook glyph sits on Apple's
+  24.4pt canvas so the blue disc reads the same size as the Apple mark
+  (both glyphs fill their viewBoxes edge to edge, matching the web
+  element's equal `1.1rem` marks).
 - **Portal-origin setter for Objective-C**: the throwing
   `setPortalOrigin(_:)` did not bridge to Objective-C; the new
   `setPortalOriginWithPortalOrigin:error:` overload (same
