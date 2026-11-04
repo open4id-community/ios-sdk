@@ -12,12 +12,11 @@ struct ContentView: View {
 
     @State private var appId = "app_4a17c6406abaefdf0d9a705e7175b37c"
     @State private var environment = "development"
-    @State private var publicSdkKey = "sdk_pk_24cf6cc954d16591812fd1b9953ef053f5133b13f7cec9ae"
-    @State private var endpoint =
-        ProcessInfo.processInfo.environment["OPEN4ID_ENDPOINT"] ?? "https://id.open4id.com/api"
+    @State private var publicSdkKey = "sdk_pk_1c91d1ee8bcf04e9226c09f291bd18c21ceeaa6f61b34203"
+    @State private var endpoint = "https://id.open4id.com/api"
     /// Portal origin hosting the per-app social bridges (GitHub/Facebook/
-    /// Apple callback pages). Defaults to the production Portal; point it
-    /// at the local Portal for development runs.
+    /// Apple callback pages). Defaults to the production Portal; override
+    /// via OPEN4ID_PORTAL_ORIGIN for local development runs.
     @State private var portalOrigin =
         ProcessInfo.processInfo.environment["OPEN4ID_PORTAL_ORIGIN"] ?? "https://app.open4id.com"
     @State private var redirectUri = "com.open4id.example.ios://open4id/callback"
@@ -61,6 +60,14 @@ struct ContentView: View {
     }
 
     @State private var authListener = SampleAuthListener()
+
+    // MARK: - Payments (App Store)
+
+    /// StoreKit 2 bridge (purchases, prices, proof source) owned by the
+    /// sample like the Android sample owns Play Billing.
+    @StateObject private var storeKit = Open4IDStoreKitBridge()
+    /// The app_store rows of the Open4ID catalog, one Buy button each.
+    @State private var appStoreProducts: [PaymentProduct] = []
 
     /// Console mirror for automated verification (simulator unified log:
     /// `subsystem == "com.open4id.example.ios"`).
@@ -115,6 +122,20 @@ struct ContentView: View {
                     Button("Get user") { run(getUser) }
                 }
 
+                Section("Payments (App Store)") {
+                    Button("Load payments catalog") { run(loadPaymentsCatalog) }
+                    ForEach(appStoreProducts, id: \.productId) { product in
+                        Button("Buy \(product.productId) [\(product.type)]"
+                               + (storeKit.prices[product.productId].map { " \($0)" } ?? "")) {
+                            run { _ = await storeKit.purchase(product, client: appClient) }
+                        }
+                    }
+                    Button("Reload StoreKit products") { run(loadStoreKitProducts) }
+                    Button("Restore purchases") { run(restorePurchases) }
+                    Button("Entitlements (ledger)") { run(refreshEntitlements) }
+                    LabeledContent("StoreKit", value: "\(storeKit.storeProductsLoaded) products")
+                }
+
                 Section("Login UI") {
                     Button("Open login dialog") {
                         prepareLoginUI()
@@ -165,6 +186,10 @@ struct ContentView: View {
             Task {
                 do {
                     try configureClient()
+                    // Bind the SDK's restore proof source once: the
+                    // payments namespace object is stable for the client's
+                    // lifetime, so this registration sticks.
+                    appClient.payments().proofSource = storeKit.proofSource
                     let bootstrap = try await appClient.bootstrap()
                     append("bootstrap ok: app=\(bootstrap.displayName ?? bootstrap.appId) "
                         + "google=\(bootstrap.login.google.enabled)")
@@ -175,8 +200,10 @@ struct ContentView: View {
                     append("attestation: \(report.verdict.rawValue) (\(report.reason ?? "-"))")
                     // Debug hook for automated verification: launch with
                     // SIMCTL_CHILD_OPEN4ID_AUTOTEST=github|facebook|apple to
-                    // auto-run one web flow (after a 5 s settle delay) and
-                    // log the typed outcome.
+                    // auto-run one web flow, or =payments to auto-run the
+                    // payment rehearsal (catalog + StoreKit products +
+                    // purchase of the first one_time row; the StoreKit sheet
+                    // needs the human's confirm in DeviceHub).
                     if let autotest = ProcessInfo.processInfo.environment["OPEN4ID_AUTOTEST"] {
                         try await Task.sleep(nanoseconds: 5_000_000_000)
                         if autotest == "github" {
@@ -188,6 +215,13 @@ struct ContentView: View {
                         } else if autotest == "github-ephemeral" {
                             appClient.setPrefersEphemeralWebSessions(true)
                             try await signInGitHub()
+                        } else if autotest == "payments" {
+                            try await loadPaymentsCatalog()
+                            try await Task.sleep(nanoseconds: 10_000_000_000)
+                            if let product = appStoreProducts.first {
+                                append("autotest: buying \(product.productId)")
+                                append(await storeKit.purchase(product, client: appClient))
+                            }
                         }
                     }
                 } catch {
@@ -351,5 +385,44 @@ struct ContentView: View {
         try await appClient.deleteAccount()
         sessionText = "not signed in"
         append("account deleted")
+    }
+
+    // MARK: - Payments actions
+
+    /// Syncs the Buy-button list from the bootstrap payment catalog and
+    /// logs the full catalog (both stores) Android-sample style.
+    private func loadPaymentsCatalog() async throws {
+        let catalog = appClient.payments().products()
+        let rows = catalog.enabled
+            ? catalog.products.map { "\($0.productId)[\($0.platform)/\($0.type)]" }.sorted()
+            : []
+        append("payments catalog: enabled=\(catalog.enabled) rows=[\(rows.joined(separator: " "))]")
+        appStoreProducts = catalog.forPlatform(PaymentProvider.appStore)
+        try await loadStoreKitProducts()
+    }
+
+    /// Resolves StoreKit prices for the catalog rows (simulator: the scheme's
+    /// StoreKit configuration; device: the App Store sandbox).
+    private func loadStoreKitProducts() async throws {
+        let catalog = appStoreProducts
+        let line = await storeKit.loadStoreProducts(for: catalog)
+        append(line)
+    }
+
+    /// SDK restore through the registered proof source
+    /// (`Transaction.currentEntitlements`).
+    private func restorePurchases() async throws {
+        let surface = appClient.payments()
+        let result = try await surface.restore()
+        append("restore ok: verified=\(result.verified) rejected=\(result.rejected) "
+            + "conflict=\(result.conflict) noProofs=\(result.proofsUnavailable)")
+    }
+
+    private func refreshEntitlements() async throws {
+        let snapshot = try await appClient.entitlements().refresh()
+        let list = snapshot.entitlements
+            .map { "\($0.key) [state=\($0.state), src=\($0.source), "
+                + "product=\($0.productId ?? "-")]" }.sorted()
+        append("entitlements: \(snapshot.entitlements.count) -> [\(list.joined(separator: " "))]")
     }
 }

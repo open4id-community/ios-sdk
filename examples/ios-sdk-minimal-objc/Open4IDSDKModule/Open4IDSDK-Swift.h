@@ -1,1 +1,1 @@
-../../../Open4IDSDK-0.3.3.xcframework/ios-arm64_x86_64-simulator/Headers/Open4IDSDK-Swift.h
+../../../Open4IDSDK-0.6.0.xcframework/ios-arm64_x86_64-simulator/Headers/Open4IDSDK-Swift.h

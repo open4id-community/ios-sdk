@@ -28,7 +28,17 @@ xcodebuild -project ios-sdk-minimal.xcodeproj -scheme ios-sdk-minimal \
 The app **auto-configures and bootstraps on launch** with the development
 application's fixtures (the sample's bundle ID `com.open4id.example.ios` is
 registered on it, native binding `platform: "ios"`), defaulting to the
-production endpoint `https://id.open4id.com/api`. A successful launch logs:
+production endpoint `https://id.open4id.com/api` and production Portal
+origin `https://app.open4id.com`. For local-stack runs, launch-time
+environment overrides pre-fill those fields (no UI editing needed):
+
+```sh
+SIMCTL_CHILD_OPEN4ID_ENDPOINT=http://localhost:10001/api
+SIMCTL_CHILD_OPEN4ID_PORTAL_ORIGIN=http://localhost:4200
+SIMCTL_CHILD_OPEN4ID_AUTOTEST=facebook   # auto-run one web flow after bootstrap
+```
+
+A successful launch logs:
 
 ```text
 open4id-minimal: bootstrap ok: app=Login Show Case google=true
@@ -43,9 +53,10 @@ open4id-minimal: bootstrap ok: app=Login Show Case google=true
 | Button | Notes |
 | --- | --- |
 | Load bootstrap | Re-fetches auth discovery for the configured app |
+| Load payments catalog | Reads the `app_store` rows of the Open4ID catalog from the bootstrap snapshot (headless `payments().products()`); one Buy button per row; purchases run through the sample's `Open4IDStoreKitBridge` (sheet → JWS → headless verify → `Transaction.finish()`) against the StoreKit configuration the shared scheme points at (`examples/Open4IDStoreConfig.storekit`) |
 | Sign in with Google | Real GoogleSignIn-SDK sign-in through the sample's `Open4IDSocialClient` override — picker → server auth code → `player_google_authorize` → Open4ID session. See "Google sign-in" below |
 | Continue as guest | Fresh guest session through the same PKCE exchange |
-| Sign in with GitHub / Apple | Real `ASWebAuthenticationSession` flows through the per-app Portal bridges (`app.open4id.com/github-callback/<bundle id>`, `/apple-callback/<bundle id>`); the sample wires `setPresentationAnchor` to the scene window on launch. Apple's first-time sign-in shows the share/hide-email sheet (`scope=email`, `response_mode=form_post`) |
+| Sign in with GitHub / Facebook / Apple | Real `ASWebAuthenticationSession` flows through the per-app Portal bridges (`<portal origin>/github-callback/<bundle id>`, `/facebook-callback/<bundle id>`, `/apple-callback/<bundle id>`); the sample wires `setPresentationAnchor` to the scene window on launch. Apple's first-time sign-in shows the share/hide-email sheet (`scope=email`, `response_mode=form_post`) |
 | Refresh session / Get user / Sign out / Delete account | Session lifecycle through the headless client |
 | Sign in / Register / Forgot password | Native email/password flows (generic anti-enumeration responses) |
 
@@ -132,3 +143,6 @@ the wired GCP iOS client). For a
 **real device**, change the redirect URI + Bundle ID to your own
 registered app (the Portal must have the iOS platform registered with that
 bundle ID, and the custom scheme must match the redirect scheme exactly).
+The **Portal origin** field is passed to the SDK's `setPortalOrigin` — the
+origin hosting the per-app `/facebook-callback/<bundle id>` and sibling
+bridges, production default unless pointed at a local Portal.

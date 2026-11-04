@@ -10,11 +10,9 @@
 		B20000000000000000000B01 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000A01 /* ContentView.swift */; };
 		B20000000000000000000B02 /* Open4IDMinimalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000A02 /* Open4IDMinimalApp.swift */; };
 		B20000000000000000000B03 /* Open4IDSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B20000000000000000000D01 /* Open4IDSDK */; };
-		B20000000000000000000B06 /* Open4IDStoreKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000A05 /* Open4IDStoreKitBridge.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		B20000000000000000000A05 /* Open4IDStoreKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Open4IDStoreKitBridge.swift; sourceTree = "<group>"; };
 		B20000000000000000000A01 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B20000000000000000000A02 /* Open4IDMinimalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Open4IDMinimalApp.swift; sourceTree = "<group>"; };
 		B20000000000000000000C01 /* macos-sdk-minimal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "macos-sdk-minimal.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -46,7 +44,6 @@
 			children = (
 				B20000000000000000000A01 /* ContentView.swift */,
 				B20000000000000000000A02 /* Open4IDMinimalApp.swift */,
-				B20000000000000000000A05 /* Open4IDStoreKitBridge.swift */,
 				B20000000000000000000A03 /* Info.plist */,
 			);
 			name = "macos-sdk-minimal";
@@ -136,7 +133,6 @@
 			files = (
 				B20000000000000000000B01 /* ContentView.swift in Sources */,
 				B20000000000000000000B02 /* Open4IDMinimalApp.swift in Sources */,
-				B20000000000000000000B06 /* Open4IDStoreKitBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
