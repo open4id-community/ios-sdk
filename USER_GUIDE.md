@@ -613,13 +613,13 @@ the SDK now owns that side.
 
 The headless surface (`payments()` / `entitlements()`) is unchanged — the
 built-in store calls exactly those APIs, and hosts that own their StoreKit
-integration (Unity IAP, RevenueCat) keep working as before.
+integration (Unity IAP) keep working as before.
 
 ## Payments and entitlements (headless)
 
 The headless payments surface is the contract the built-in store (previous
 section) is written on, and the path for hosts that own their store client
-(Unity IAP, RevenueCat, a custom StoreKit bridge). The SDK verifies nothing
+(Unity IAP, a custom StoreKit bridge). The SDK verifies nothing
 locally and grants nothing by itself: your game buys through a store, then
 hands the resulting proof to the SDK. Core API re-verifies that proof with
 Apple before granting an entitlement, so a client claim is only a hint and
@@ -884,7 +884,7 @@ types, and none of them carries the JWS (there is no `verifyReceipt`
 fallback). A pure-ObjC store client therefore cannot produce a usable proof.
 Two ways out, both Apple-supported:
 
-- Your project already has Swift in it (or uses Unity IAP / RevenueCat) —
+- Your project already has Swift in it (or uses Unity IAP) —
   hand the `jwsRepresentation` string over the existing bridge and pass it to
   `[TransactionProof appStoreWithProductId:jwsRepresentation:error:]`; or
 - keep one small Swift file that wraps StoreKit 2 behind `@objcMembers`

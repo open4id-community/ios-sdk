@@ -81,8 +81,7 @@ The monorepo tags every release `ios-v<version>` (lineage marker).
   (`payments()`), `Open4IDEntitlements` (`entitlements()`), and the
   `PaymentsTypes` value types, with `@objc` bridges matching the existing
   Objective-C surface. The SDK never opens a purchase sheet and adds no
-  package dependency: the game buys through StoreKit, Unity IAP, or
-  RevenueCat and forwards the StoreKit 2 `jwsRepresentation` with
+  package dependency: the game buys through StoreKit forwards the StoreKit 2 `jwsRepresentation` with
   `verifyTransaction(TransactionProof.appStore(...))`. Core API
   re-verifies the JWS with Apple before granting anything; there is no
   `verifyReceipt` fallback.
