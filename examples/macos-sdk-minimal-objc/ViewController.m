@@ -403,15 +403,22 @@ static void OnMain(void (^block)(void)) {
                     row.product.productId, (unsigned long)outcome.entitlements.count,
                     [keys componentsJoinedByString:@", "]]];
                 if (expiredGrant) {
-                    // Re-subscribe hint: for a subscription the store account
-                    // already owns, Apple returns the existing transaction
-                    // WITHOUT a purchase sheet. An expired state means the
-                    // sandbox account owns a lapsed subscription (sandbox
-                    // 1-month ≈ 5 minutes).
-                    [self append:@"storekit: no sheet shown — Apple returned the "
-                        "subscription's existing transaction (already owned). "
-                        "Clear the sandbox tester's subscription history to "
-                        "re-test the sheet."];
+                    // Re-purchase of a lapsed subscription: Apple's sandbox
+                    // returns the existing transaction WITHOUT a sheet, so
+                    // no payment happens. Production resubscribes normally;
+                    // see the README's subscription section for the local
+                    // StoreKit path that re-purchases with a fresh sheet.
+                    [self append:@"storekit: no sheet shown — Apple's sandbox "
+                        "returned the subscription's existing (lapsed) "
+                        "transaction instead of the purchase sheet, so no new "
+                        "payment started. Known sandbox limitation. In "
+                        "production the resubscribe sheet shows and starts a "
+                        "new cycle. To re-test here: clear the sandbox "
+                        "tester's subscription history (App Store Connect → "
+                        "Users and Access → Sandbox → the tester), or run via "
+                        "Xcode so the local StoreKit configuration applies — "
+                        "expired subscriptions re-purchase with a fresh "
+                        "sheet there."];
                 }
             }
         } else if (outcome.isPending) {
@@ -420,6 +427,17 @@ static void OnMain(void (^block)(void)) {
         } else {
             [self append:[NSString stringWithFormat:
                 @"buy %@: cancelled by user", row.product.productId]];
+            if ([row.product.type isEqualToString:@"subscription"]) {
+                // Apple refuses a second purchase of a subscription the
+                // store account still holds ("You're currently subscribed
+                // to this") and surfaces it as userCancelled — no payment
+                // happens. The subscription becomes re-purchasable after
+                // it lapses.
+                [self append:@"storekit: Apple refused the second purchase — "
+                    "the store account still holds an active subscription "
+                    "for this product. It becomes re-purchasable once it "
+                    "lapses (sandbox 1-month ≈ 5 minutes)."];
+            }
         }
         });
     }];

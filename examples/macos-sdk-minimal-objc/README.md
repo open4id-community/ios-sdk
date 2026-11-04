@@ -178,6 +178,36 @@ so the sample's Buy buttons show the StoreKit purchase sheet:
 4. **Restore purchases** exercises the proof source the store registered;
    **Entitlements (ledger)** recomputes from the server ledger.
 
+## Re-purchasing a subscription (`pkg_03`)
+
+The three states a Buy on a subscription can land in, and what the log says:
+
+1. **Subscription still active** (sandbox 1-month ≈ 5 minutes): Apple
+   refuses the second purchase with its "You're currently subscribed to
+   this" alert and returns `userCancelled` — no payment happens. The sample
+   logs `cancelled by user` plus the Apple-refused hint. It becomes
+   re-purchasable once the period lapses.
+2. **Lapsed (expired) in the real sandbox**: Apple returns the existing
+   lapsed transaction **without any sheet** — verified grant comes back
+   `test_pk_03 [expired, expires=…]` plus the sample's no-sheet hint. This
+   is a known Apple **sandbox limitation** (widely reported by developers),
+   not a sample or SDK defect: the Buy button stays enabled and the
+   pipeline runs; Apple just never starts a new payment.
+3. **Production**: the resubscribe sheet shows normally and the new cycle
+   verifies as `active` with a fresh `expires=`.
+
+To re-test a fresh cycle locally:
+
+- **Run via Xcode** with the scheme's StoreKit configuration active — the
+  local StoreKit environment re-purchases an expired subscription with a
+  fresh sheet and a new cycle (then verify answers `active`). Launching the
+  built `.app` directly bypasses the configuration and hits the real
+  sandbox, where limitation 2 applies; the sandbox sheet's
+  `[Environment: Sandbox]` footer tells you which environment you are in.
+- Or clear the sandbox tester's subscription history (App Store Connect →
+  Users and Access → Sandbox → the tester → Clear Subscription History) and
+  buy again against the real sandbox.
+
 > **Endpoint matters for verification.** The sample defaults to the
 > production node (`https://id.open4id.com/api`). Verification reads the
 > Portal's **Payments → App Store → Bundle ID + Notification environment**

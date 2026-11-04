@@ -269,15 +269,27 @@ struct ContentView: View {
                 // sandbox account owns a lapsed subscription (sandbox
                 // 1-month ≈ 5 minutes).
                 if outcome.entitlements.contains(where: { $0.state == "expired" }) {
-                    append("storekit: no sheet shown — Apple returned the subscription's "
-                        + "existing transaction (already owned). Clear the sandbox tester's "
-                        + "subscription history to re-test the sheet.")
+                    append("storekit: no sheet shown — Apple's sandbox returned the "
+                        + "subscription's existing (lapsed) transaction instead of the "
+                        + "purchase sheet, so no new payment started. Known sandbox "
+                        + "limitation; production resubscribes normally. To re-test: clear "
+                        + "the sandbox tester's subscription history, or run via Xcode so "
+                        + "the local StoreKit configuration applies (fresh sheet there).")
                 }
             }
         case Open4IDPurchaseOutcome.pending:
             append("buy \(productId): pending (ask-to-buy)")
         default:
             append("buy \(productId): cancelled by user")
+            if row.product.type == "subscription" {
+                // Apple refuses a second purchase of a subscription the store
+                // account still holds ("You're currently subscribed to this")
+                // and surfaces it as userCancelled — no payment happens.
+                append("storekit: Apple refused the second purchase — the store "
+                    + "account still holds an active subscription for this product. "
+                    + "It becomes re-purchasable once it lapses (sandbox 1-month ≈ "
+                    + "5 minutes).")
+            }
         }
     }
 

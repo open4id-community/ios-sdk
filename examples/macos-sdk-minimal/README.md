@@ -127,16 +127,25 @@ makes visible (each entitlement line now carries `expires=`):
 - A fresh sandbox buy answers `test_pk_03 [active]` with an expiry ~5 minutes
   out; re-read it later and the state has moved on to `expired` — the ledger
   is simply reporting what Apple signed.
-- **Re-buying an owned subscription shows no purchase sheet.** When the
-  sandbox store account already owns `pkg_03` (active or lapsed), Apple's
-  `purchase()` returns the existing transaction silently and re-subscribes —
-  that is Apple's behavior, not a missing step in the sample. A lapsed
-  subscription comes back `expired` (the sample logs a
-  `storekit: no sheet shown …` hint when this happens). To re-test the
-  sheet and a fresh cycle, clear the tester's subscription history
-  (App Store Connect → Users and Access → Sandbox Testers → the tester →
-  Clear Subscription History, or the device's sandbox account management)
-  and buy again.
+- **Re-purchase lifecycle of `pkg_03`.** While the subscription is still
+  **active**, Apple refuses the second purchase ("You're currently
+  subscribed to this") and `purchase()` returns `userCancelled` — the
+  sample logs `cancelled by user` plus the Apple-refused hint; it becomes
+  re-purchasable once the period lapses (sandbox 1-month ≈ 5 minutes).
+  When it has **lapsed in the real sandbox**, Apple returns the existing
+  lapsed transaction **without any sheet** — the verified grant comes back
+  `test_pk_03 [expired, expires=…]` plus the sample's no-sheet hint. That
+  no-sheet repurchase is a known Apple **sandbox limitation** (widely
+  reported), not a missing step in the sample. In **production** the
+  resubscribe sheet shows normally and the new cycle verifies as `active`.
+  To re-test a fresh cycle locally: run via Xcode with the scheme's
+  StoreKit configuration active — the local StoreKit environment
+  re-purchases an expired subscription with a fresh sheet (launching the
+  built `.app` directly bypasses the configuration and hits the real
+  sandbox, where the sandbox sheet's `[Environment: Sandbox]` footer tells
+  you which environment you are in) — or clear the tester's subscription
+  history (App Store Connect → Users and Access → Sandbox Testers → the
+  tester → Clear Subscription History) and buy again.
 
 ### Portal prerequisites
 
