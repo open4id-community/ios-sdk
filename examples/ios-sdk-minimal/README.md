@@ -8,7 +8,7 @@ action order, and an append-only log console.
 
 - Xcode 15+ (verified with Xcode 27.1), iOS 16+ simulator or device.
 - The app links the SDK as the prebuilt **XCFramework**
-  (`../../Open4IDSDK-0.5.0.xcframework`, repo root) — no registry dependency.
+  (`../../Open4IDSDK-0.6.0.xcframework`, repo root) — no registry dependency.
   GoogleSignIn is resolved via SPM from the sample project.
 
 ## Build & run
@@ -22,7 +22,7 @@ Command line:
 
 ```sh
 xcodebuild -project ios-sdk-minimal.xcodeproj -scheme ios-sdk-minimal \
-  -destination 'platform=iOS Simulator,name=iPhone Duo' build
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
 The app **auto-configures and bootstraps on launch** with the development
@@ -53,12 +53,27 @@ open4id-minimal: bootstrap ok: app=Login Show Case google=true
 | Button | Notes |
 | --- | --- |
 | Load bootstrap | Re-fetches auth discovery for the configured app |
-| Load payments catalog | Reads the `app_store` rows of the Open4ID catalog from the bootstrap snapshot (headless `payments().products()`); one Buy button per row; purchases run through the sample's `Open4IDStoreKitBridge` (sheet → JWS → headless verify → `Transaction.finish()`) against the StoreKit configuration the shared scheme points at (`examples/Open4IDStoreConfig.storekit`) |
 | Sign in with Google | Real GoogleSignIn-SDK sign-in through the sample's `Open4IDSocialClient` override — picker → server auth code → `player_google_authorize` → Open4ID session. See "Google sign-in" below |
 | Continue as guest | Fresh guest session through the same PKCE exchange |
 | Sign in with GitHub / Facebook / Apple | Real `ASWebAuthenticationSession` flows through the per-app Portal bridges (`<portal origin>/github-callback/<bundle id>`, `/facebook-callback/<bundle id>`, `/apple-callback/<bundle id>`); the sample wires `setPresentationAnchor` to the scene window on launch. Apple's first-time sign-in shows the share/hide-email sheet (`scope=email`, `response_mode=form_post`) |
 | Refresh session / Get user / Sign out / Delete account | Session lifecycle through the headless client |
 | Sign in / Register / Forgot password | Native email/password flows (generic anti-enumeration responses) |
+
+## Payments (App Store)
+
+Since SDK 0.6.0 the payment feature lives in the SDK's built-in store —
+one call, `client.storeKitPayments()`, enables the whole pipeline
+(shop rows from the Open4ID catalog request, the StoreKit 2 purchase flow —
+sheet → JWS proof → verify → `Transaction.finish` — the restore proof source,
+and the `Transaction.updates` listener for ask-to-buy approvals and
+cross-device buys). The sample provides the shop UI only: **Tap Load shop (SDK
+store)** and the sample renders one Buy button per `Open4IDStoreProduct` row
+(disabled when the row is not resolvable), plus **Restore purchases** and
+**Entitlements (ledger)** through the same SDK namespaces as the macOS
+samples. Products resolve through the scheme's StoreKit test configuration
+(`examples/Open4IDStoreConfig.storekit`) on the simulator and through the
+App Store sandbox on a real device. A purchase with no active session signs
+in as a guest automatically.
 
 ## Login UI
 

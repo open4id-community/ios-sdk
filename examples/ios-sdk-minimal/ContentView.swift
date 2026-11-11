@@ -63,11 +63,11 @@ struct ContentView: View {
 
     // MARK: - Payments (App Store)
 
-    /// StoreKit 2 bridge (purchases, prices, proof source) owned by the
-    /// sample like the Android sample owns Play Billing.
-    @StateObject private var storeKit = Open4IDStoreKitBridge()
-    /// The app_store rows of the Open4ID catalog, one Buy button each.
-    @State private var appStoreProducts: [PaymentProduct] = []
+    /// Shop rows from the SDK's built-in store: the `app_store` catalog rows
+    /// joined with the StoreKit products (name/price). The sample renders one
+    /// Buy button per row; the SDK owns everything behind the button. There
+    /// is no shop view in the SDK on purpose — the shop UI stays host-owned.
+    @State private var shopRows: [Open4IDStoreProduct] = []
 
     /// Console mirror for automated verification (simulator unified log:
     /// `subsystem == "com.open4id.example.ios"`).
@@ -123,17 +123,17 @@ struct ContentView: View {
                 }
 
                 Section("Payments (App Store)") {
-                    Button("Load payments catalog") { run(loadPaymentsCatalog) }
-                    ForEach(appStoreProducts, id: \.productId) { product in
-                        Button("Buy \(product.productId) [\(product.type)]"
-                               + (storeKit.prices[product.productId].map { " \($0)" } ?? "")) {
-                            run { _ = await storeKit.purchase(product, client: appClient) }
+                    Button("Load shop (SDK store)") { run(loadShop) }
+                    ForEach(shopRows, id: \.product.productId) { row in
+                        Button("Buy \(row.product.productId) [\(row.product.type)]"
+                               + (row.displayPrice.map { " \($0)" } ?? "")) {
+                            run { try await buy(row) }
                         }
+                        .disabled(!row.isResolvable)
                     }
-                    Button("Reload StoreKit products") { run(loadStoreKitProducts) }
                     Button("Restore purchases") { run(restorePurchases) }
                     Button("Entitlements (ledger)") { run(refreshEntitlements) }
-                    LabeledContent("StoreKit", value: "\(storeKit.storeProductsLoaded) products")
+                    LabeledContent("StoreKit", value: "\(shopRows.count) products")
                 }
 
                 Section("Login UI") {
@@ -186,10 +186,25 @@ struct ContentView: View {
             Task {
                 do {
                     try configureClient()
-                    // Bind the SDK's restore proof source once: the
-                    // payments namespace object is stable for the client's
-                    // lifetime, so this registration sticks.
-                    appClient.payments().proofSource = storeKit.proofSource
+                    // One call enables the whole payment feature: products
+                    // from the SDK catalog request, the StoreKit purchase
+                    // pipeline, the restore proof source, and the
+                    // Transaction.updates listener. The Buy buttons below
+                    // stay host-owned.
+                    let store = appClient.storeKitPayments()
+                    // Ask-to-buy approvals and cross-device buys complete
+                    // outside the Buy button's pipeline; the SDK verifies
+                    // and finishes them automatically and reports the
+                    // outcome here.
+                    store.onTransactionUpdate = { outcome in
+                        if outcome.isVerified {
+                            append("update \(outcome.productId): verified — granted "
+                                + "(ask-to-buy approval or cross-device buy); "
+                                + "refresh entitlements")
+                        } else {
+                            append("update \(outcome.productId): \(outcome.kind)")
+                        }
+                    }
                     let bootstrap = try await appClient.bootstrap()
                     append("bootstrap ok: app=\(bootstrap.displayName ?? bootstrap.appId) "
                         + "google=\(bootstrap.login.google.enabled)")
@@ -216,11 +231,11 @@ struct ContentView: View {
                             appClient.setPrefersEphemeralWebSessions(true)
                             try await signInGitHub()
                         } else if autotest == "payments" {
-                            try await loadPaymentsCatalog()
+                            try await loadShop()
                             try await Task.sleep(nanoseconds: 10_000_000_000)
-                            if let product = appStoreProducts.first {
-                                append("autotest: buying \(product.productId)")
-                                append(await storeKit.purchase(product, client: appClient))
+                            if let row = shopRows.first(where: { $0.isResolvable }) {
+                                append("autotest: buying \(row.product.productId)")
+                                try await buy(row)
                             }
                         }
                     }
@@ -387,33 +402,80 @@ struct ContentView: View {
         append("account deleted")
     }
 
-    // MARK: - Payments actions
+    // MARK: - Shop actions (host UI over the SDK store)
 
-    /// Syncs the Buy-button list from the bootstrap payment catalog and
-    /// logs the full catalog (both stores) Android-sample style.
-    private func loadPaymentsCatalog() async throws {
+    /// Loads the shop through the SDK's built-in store: the catalog log comes
+    /// from the SDK request (both stores), the Buy-button rows from
+    /// `loadProducts()` — catalog rows joined with StoreKit products and
+    /// prices (the scheme's StoreKit test configuration locally, the App
+    /// Store sandbox on a real build).
+    private func loadShop() async throws {
         let catalog = appClient.payments().products()
         let rows = catalog.enabled
             ? catalog.products.map { "\($0.productId)[\($0.platform)/\($0.type)]" }.sorted()
             : []
         append("payments catalog: enabled=\(catalog.enabled) rows=[\(rows.joined(separator: " "))]")
-        appStoreProducts = catalog.forPlatform(PaymentProvider.appStore)
-        try await loadStoreKitProducts()
+        shopRows = try await appClient.storeKitPayments().loadProducts()
+        let described = shopRows.map { row in
+            row.product.productId + " " + (row.displayPrice ?? "-")
+        }
+        append("storekit: \(shopRows.count) products \(described.joined(separator: ", "))")
     }
 
-    /// Resolves StoreKit prices for the catalog rows (simulator: the scheme's
-    /// StoreKit configuration; device: the App Store sandbox).
-    private func loadStoreKitProducts() async throws {
-        let catalog = appStoreProducts
-        let line = await storeKit.loadStoreProducts(for: catalog)
-        append(line)
+    /// Buys one row through the SDK's built-in store and logs the outcome.
+    /// The row in hand is exactly what the user clicked — pass it as-is so
+    /// the pipeline never re-looks it up against a possibly stale snapshot.
+    /// The SDK ran the whole pipeline (StoreKit sheet → JWS proof → verify →
+    /// finish); the sample only renders the result, like a game would.
+    private func buy(_ row: Open4IDStoreProduct) async throws {
+        let productId = row.product.productId
+        let outcome = try await appClient.storeKitPayments().purchase(row.product)
+        switch outcome.kind {
+        case Open4IDPurchaseOutcome.verified:
+            if let receipt = outcome.receipt {
+                append("buy \(productId): verifyConsumable ok state=\(receipt.state) "
+                    + "quantity=\(receipt.quantity) ref=\(receipt.transactionRef)")
+            } else {
+                let granted = outcome.entitlements
+                    .map { "\($0.key) [\($0.state), expires=\($0.expiresAt ?? "-")]" }
+                    .sorted()
+                    .joined(separator: ", ")
+                append("buy \(productId): verifyTransaction ok, "
+                    + "\(outcome.entitlements.count) entitlement(s) \(granted)")
+                // Re-subscribe hint: for a subscription the store account
+                // already owns, Apple returns the existing transaction
+                // WITHOUT a purchase sheet. An expired state means the
+                // sandbox account owns a lapsed subscription (sandbox
+                // 1-month ≈ 5 minutes).
+                if outcome.entitlements.contains(where: { $0.state == "expired" }) {
+                    append("storekit: no sheet shown — Apple's sandbox returned the "
+                        + "subscription's existing (lapsed) transaction instead of the "
+                        + "purchase sheet, so no new payment started. Known sandbox "
+                        + "limitation; production resubscribes normally. To re-test: clear "
+                        + "the sandbox tester's subscription history, or run via Xcode so "
+                        + "the local StoreKit configuration applies (fresh sheet there).")
+                }
+            }
+        case Open4IDPurchaseOutcome.pending:
+            append("buy \(productId): pending (ask-to-buy)")
+        default:
+            append("buy \(productId): cancelled by user")
+            if row.product.type == "subscription" {
+                // Apple refuses a second purchase of a subscription the store
+                // account still holds ("You're currently subscribed to this")
+                // and surfaces it as userCancelled — no payment happens.
+                append("storekit: Apple refused the second purchase — the store "
+                    + "account still holds an active subscription for this product. "
+                    + "It becomes re-purchasable once it lapses (sandbox 1-month ≈ "
+                    + "5 minutes).")
+            }
+        }
     }
 
-    /// SDK restore through the registered proof source
+    /// SDK restore through the proof source the built-in store registered
     /// (`Transaction.currentEntitlements`).
     private func restorePurchases() async throws {
-        let surface = appClient.payments()
-        let result = try await surface.restore()
+        let result = try await appClient.payments().restore()
         append("restore ok: verified=\(result.verified) rejected=\(result.rejected) "
             + "conflict=\(result.conflict) noProofs=\(result.proofsUnavailable)")
     }

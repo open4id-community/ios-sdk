@@ -15,6 +15,9 @@ SwiftUI. Uses `UIKit` and the SDK's `@objc` completion-handler surface.
 - Session refresh, sign-out, delete account
 - Auth-state listener (`onAuthStateChanged`) firing on sign-in/sign-out
 - Auto configure + bootstrap on launch
+- Payments (App Store) through the SDK's built-in store (SDK 0.6.0
+  `storeKitPayments`): shop rows + StoreKit purchase pipeline + restore +
+  entitlement ledger, host-owned Buy buttons
 
 ## Files
 
@@ -37,7 +40,9 @@ The SDK is linked as the prebuilt **XCFramework** at the repo root
 (`../../Open4IDSDK-0.6.0.xcframework`); the project's `-fmodule-map-file`
 build setting points Clang at `Open4IDSDKModule/module.modulemap` so
 `@import Open4IDSDK;` resolves. The `GoogleSignIn-iOS` package is fetched
-remotely via SPM for the Google sign-in override.
+remotely via SPM for the Google sign-in override. The shared scheme pins the
+StoreKit test configuration `examples/Open4IDStoreConfig.storekit`, so
+simulator runs resolve the shop products locally.
 
 ## Local-stack runs
 
@@ -118,6 +123,46 @@ self.loginDialogHandle = [Open4IDLoginDialogObjC
 Inside the card, guest / email-password / GitHub / Apple / Google flows run
 through the same configured client as the headless section, so both present
 web sessions from the registered presentation anchor (`AppDelegate.m`).
+
+## Payments (App Store) from ObjC
+
+Since SDK 0.6.0 the payment feature lives in the SDK's built-in store, so the
+sample stays pure Objective-C with **zero Swift files** — StoreKit 2 is a
+Swift-only API and the SDK owns that side (same pattern as
+`examples/macos-sdk-minimal-objc`). `client.storeKitPayments` enables the
+whole pipeline in one call: shop rows from the Open4ID catalog request
+(`[payments products]`), the StoreKit 2 purchase flow (sheet → JWS proof →
+verify → `Transaction.finish`), the restore proof source, and the
+`Transaction.updates` listener. The sample only renders host-owned Buy
+buttons from the rows `loadProducts:` returns.
+
+```objc
+// One call enables the whole payment feature (cached namespace).
+Open4IDStoreKitPayments *store = [client storeKitPayments];
+store.onTransactionUpdate = ^(Open4IDPurchaseOutcome *outcome) {
+    // Ask-to-buy approvals and cross-device buys (main queue).
+};
+
+// Shop rows: catalog joined with StoreKit products (name/price); the
+// scheme's StoreKit configuration locally, the App Store sandbox on device.
+[store loadProducts:^(NSArray<Open4IDStoreProduct *> *products, NSError *error) { ... }];
+
+// Buy: the SDK runs sheet → verify → finish; the host renders the outcome.
+[store purchase:row.product
+     completion:^(Open4IDPurchaseOutcome *outcome, NSError *error) { ... }];
+
+// Restore + ledger through the stable payments/entitlements namespaces.
+[payments restore:^(RestoreResult *result, NSError *error) { ... }];
+[entitlements refresh:^(EntitlementSnapshot *snapshot, NSError *error) { ... }];
+```
+
+A purchase that has no session signs in as a guest automatically, which
+requires guest login to be enabled for the application. Products resolve
+through the scheme's StoreKit test configuration
+(`examples/Open4IDStoreConfig.storekit`) on the simulator and through the
+App Store sandbox on a real device. `OPEN4ID_AUTOTEST=payments` auto-runs
+the rehearsal (shop load + purchase of the first resolvable row; the
+StoreKit sheet still needs the human's confirm).
 
 ## Notes
 

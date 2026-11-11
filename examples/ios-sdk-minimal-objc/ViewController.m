@@ -8,7 +8,36 @@ NS_ASSUME_NONNULL_BEGIN
 /// Mirrors `examples/ios-sdk-minimal/ContentView.swift`: editable
 /// configuration fields, the same action order (bootstrap, social row,
 /// refresh, credentials, user, sign-out, delete), and an append-only log
-/// console. Pure Objective-C — no SwiftUI.
+/// console. Pure Objective-C — no SwiftUI. StoreKit 2 is a Swift-only API,
+/// so the payments feature lives in the SDK's built-in store
+/// (`client.storeKitPayments`, SDK 0.6.0) — the same pattern
+/// `examples/macos-sdk-minimal-objc` uses — and this sample only renders
+/// host-owned Buy buttons from the `Open4IDStoreProduct` rows it returns.
+
+/// The SDK's `@objc` completion twins may fire on a background executor, so
+/// every completion body hops to the main queue before touching UIKit.
+static void OnMain(void (^block)(void)) {
+    if ([NSThread isMainThread]) {
+        block();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), block);
+    }
+}
+
+/// Typed-error detail for the log console: stable key (in
+/// `NSLocalizedDescriptionKey` / `userInfo[@"key"]`) plus field errors, so a
+/// failure names its exact gate. The proof value never reaches the string.
+static NSString *DescribeError(NSError *error) {
+    NSString *text = error.localizedDescription;
+    id rawFields = [error.userInfo objectForKey:@"field_errors"];
+    if ([rawFields isKindOfClass:[NSDictionary class]] &&
+        [(NSDictionary *)rawFields count] > 0) {
+        return [NSString stringWithFormat:@"%@ %@", text,
+                (NSDictionary *)rawFields];
+    }
+    return text.length ? text : @"unknown error";
+}
+
 @interface ViewController ()
 
 @property (strong, nonatomic) UIScrollView *scrollView;
@@ -46,6 +75,22 @@ NS_ASSUME_NONNULL_BEGIN
 /// Auth-state listener token (unsubscribe closure)
 @property (strong, nonatomic) void (^ _Nullable authListenerUnsubscribe)(void);
 
+/// Payments (App Store). The shop UI is host-owned: one Buy button per row
+/// the SDK's built-in store returns.
+@property (strong, nonatomic) NSArray<Open4IDStoreProduct *> *shopRows;
+/// Buy button tag → shop row.
+@property (strong, nonatomic) NSMutableDictionary<NSNumber *, Open4IDStoreProduct *> *rowsByTag;
+@property (strong, nonatomic) UIStackView *buyButtonsStack;
+/// SDK namespaces, cached once (stable for the client's lifetime, like the
+/// payments/entitlements namespaces).
+@property (strong, nonatomic) Open4IDPayments *payments;
+@property (strong, nonatomic) Open4IDEntitlements *entitlements;
+/// The SDK's built-in StoreKit store namespace (SDK 0.6.0
+/// `auth.storeKitPayments()`): catalog → StoreKit products join, the whole
+/// purchase pipeline, the restore proof source, and the Transaction.updates
+/// listener.
+@property (strong, nonatomic) Open4IDStoreKitPayments *paymentsStore;
+
 @end
 
 @implementation ViewController
@@ -56,7 +101,8 @@ static NSString *const kDefaultPublicSdkKey =
     @"sdk_pk_24cf6cc954d16591812fd1b9953ef053f5133b13f7cec9ae";
 /// Dev fixture / launch-override defaults: `SIMCTL_CHILD_OPEN4ID_*`
 /// environment variables pre-fill the config fields (same hook as the
-/// Swift sibling sample) and `OPEN4ID_AUTOTEST` auto-runs one web flow.
+/// Swift sibling sample) and `OPEN4ID_AUTOTEST` auto-runs one web flow
+/// (`facebook`|`github`|`apple`) or the `payments` rehearsal.
 static NSString *const kEnvEndpoint = @"OPEN4ID_ENDPOINT";
 static NSString *const kEnvPortalOrigin = @"OPEN4ID_PORTAL_ORIGIN";
 static NSString *const kEnvAutotest = @"OPEN4ID_AUTOTEST";
@@ -75,6 +121,8 @@ static NSString *const kDefaultGoogleIosClientId =
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.logLines = [NSMutableArray arrayWithObject:@"[open4id-minimal-objc] Ready."];
+    self.shopRows = @[];
+    self.rowsByTag = [NSMutableDictionary dictionary];
 
     [self buildUI];
     [self reloadLog];
@@ -210,6 +258,20 @@ static NSString *const kDefaultGoogleIosClientId =
     [self.stackView addArrangedSubview:[self sectionLabel:@"Login UI"]];
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Open login dialog" action:@selector(tapOpenLoginDialog) height:buttonHeight style:UIButtonTypeSystem]];
 
+    // MARK: Payments section — the SDK's built-in store (SDK 0.6.0) feeds
+    // the Buy buttons; the shop UI itself is host-owned (this sample's UIKit
+    // stack), exactly like the macOS sibling `macos-sdk-minimal-objc`.
+    self.buyButtonsStack = [[UIStackView alloc] init];
+    self.buyButtonsStack.axis = UILayoutConstraintAxisVertical;
+    self.buyButtonsStack.spacing = 6.0f;
+    self.buyButtonsStack.alignment = UIStackViewAlignmentFill;
+    [self.buyButtonsStack addArrangedSubview:[self subtleLabel:@"(no shop rows — load the shop first)"]];
+    [self.stackView addArrangedSubview:[self sectionLabel:@"Payments (App Store)"]];
+    [self.stackView addArrangedSubview:[self buttonWithTitle:@"Load shop (SDK store)" action:@selector(tapLoadShop) height:buttonHeight style:UIButtonTypeSystem]];
+    [self.stackView addArrangedSubview:self.buyButtonsStack];
+    [self.stackView addArrangedSubview:[self buttonWithTitle:@"Restore purchases" action:@selector(tapRestorePurchases) height:buttonHeight style:UIButtonTypeSystem]];
+    [self.stackView addArrangedSubview:[self buttonWithTitle:@"Entitlements (ledger)" action:@selector(tapEntitlements) height:buttonHeight style:UIButtonTypeSystem]];
+
     // MARK: Log section
     [self.stackView addArrangedSubview:[self sectionLabel:@"Log"]];
 
@@ -252,6 +314,17 @@ static NSString *const kDefaultGoogleIosClientId =
         [row addArrangedSubview:button];
     }
     return row;
+}
+
+/// A muted helper label (empty-shop placeholder when no shop rows are
+/// loaded yet).
+- (UILabel *)subtleLabel:(NSString *)text {
+    UILabel *label = [[UILabel alloc] init];
+    label.text = text;
+    label.font = [UIFont systemFontOfSize:13];
+    label.textColor = [UIColor secondaryLabelColor];
+    label.numberOfLines = 0;
+    return label;
 }
 
 /// A section heading (bold gray label). Adds 20pt of extra space before the
@@ -365,6 +438,34 @@ static NSString *const kDefaultGoogleIosClientId =
     // against this origin — never resets session state, so it is safe on
     // every configure (validation errors surface through `error` too).
     [client setPortalOriginWithPortalOrigin:self.portalOriginField.text error:error];
+    if (error && *error) return;
+    if (!self.payments) {
+        // The namespace objects are stable for the client's lifetime.
+        self.payments = client.payments;
+        self.entitlements = client.entitlements;
+        // One call enables the whole payment feature: products from the SDK
+        // catalog request, the StoreKit purchase pipeline, the restore proof
+        // source (registered on the payments namespace automatically), and
+        // the Transaction.updates listener.
+        self.paymentsStore = [client storeKitPayments];
+        // Ask-to-buy approvals and cross-device buys complete outside the
+        // Buy button's pipeline; the SDK verifies and finishes them
+        // automatically and reports the outcome here (main queue).
+        __weak typeof(self) weakSelf = self;
+        self.paymentsStore.onTransactionUpdate = ^(Open4IDPurchaseOutcome *outcome) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            if (outcome.isVerified) {
+                [strongSelf appendLog:[NSString stringWithFormat:
+                    @"update %@: verified — granted (ask-to-buy approval or "
+                    "cross-device buy); refresh entitlements",
+                    outcome.productId]];
+            } else {
+                [strongSelf appendLog:[NSString stringWithFormat:
+                    @"update %@: %@", outcome.productId, outcome.kind]];
+            }
+        };
+    }
 }
 
 - (void)runAction:(void (^ _Nullable)(NSError * _Nullable))action {
@@ -424,9 +525,10 @@ static NSString *const kDefaultGoogleIosClientId =
 }
 
 /// Debug hook for automated verification (mirrors the Swift sibling
-/// sample): when launched with `OPEN4ID_AUTOTEST=facebook`, auto-run one
-/// web flow after a 5 s settle delay so the typed outcome lands in the
-/// log console without tapping anything.
+/// sample): when launched with `OPEN4ID_AUTOTEST=<value>`, auto-run one
+/// web flow (`facebook`|`github`|`apple`) or the `payments` rehearsal five
+/// seconds after bootstrap so the typed outcome lands in the log console
+/// without tapping anything.
 - (void)runAutotestIfRequested {
     NSString *autotest = [NSProcessInfo.processInfo.environment objectForKey:kEnvAutotest];
     if (!autotest.length) return;
@@ -438,6 +540,22 @@ static NSString *const kDefaultGoogleIosClientId =
             [self tapSignInGitHub];
         } else if ([autotest isEqualToString:@"apple"]) {
             [self tapSignInApple];
+        } else if ([autotest isEqualToString:@"payments"]) {
+            // Payment rehearsal through the SDK's built-in store: shop load,
+            // then purchase of the first resolvable row (the StoreKit sheet
+            // needs the human's confirm in DeviceHub).
+            [self tapLoadShop];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                for (Open4IDStoreProduct *row in self.shopRows) {
+                    if (row.isResolvable) {
+                        [self appendLog:[NSString stringWithFormat:
+                            @"autotest: buying %@", row.product.productId]];
+                        [self buyRow:row];
+                        return;
+                    }
+                }
+            });
         }
     });
 }
@@ -643,6 +761,228 @@ static NSString *const kDefaultGoogleIosClientId =
             });
         }];
     }];
+}
+
+#pragma mark - Payments (App Store, SDK 0.6.0 store)
+
+/// Loads the shop: the catalog log comes from the SDK request (both stores),
+/// and the Buy-button rows come from the SDK's built-in store
+/// (`loadProducts:` — catalog rows joined with StoreKit products and prices;
+/// the scheme's StoreKit test configuration locally, the App Store sandbox
+/// on a device). The shop UI stays this sample's job — one Buy button per
+/// row, exactly like a game renders its own.
+- (void)tapLoadShop {
+    [self runAction:^(NSError * _Nullable error) {
+        if (error) return;
+        PaymentCatalog *catalog = [self.payments products];
+        NSMutableArray<NSString *> *rows = [NSMutableArray array];
+        if (catalog.enabled) {
+            for (PaymentProduct *product in catalog.products) {
+                [rows addObject:[NSString stringWithFormat:@"%@[%@/%@]",
+                    product.productId, product.platform, product.type]];
+            }
+            [rows sortUsingSelector:@selector(compare:)];
+        }
+        [self appendLog:[NSString stringWithFormat:
+            @"payments catalog: enabled=%d rows=[%@]",
+            catalog.enabled, [rows componentsJoinedByString:@" "]]];
+        __weak typeof(self) weakSelf = self;
+        [self.paymentsStore
+            loadProducts:^(NSArray<Open4IDStoreProduct *> * _Nullable products,
+                           NSError * _Nullable err) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            OnMain(^{
+            if (err) {
+                [strongSelf appendLog:[NSString stringWithFormat:
+                    @"failed: %@", DescribeError(err)]];
+                return;
+            }
+            strongSelf.shopRows = products;
+            [strongSelf rebuildBuyButtons];
+            NSMutableArray<NSString *> *described = [NSMutableArray array];
+            for (Open4IDStoreProduct *row in products) {
+                [described addObject:[NSString stringWithFormat:@"%@ %@",
+                    row.product.productId, row.displayPrice ?: @"-"]];
+            }
+            [strongSelf appendLog:[NSString stringWithFormat:
+                @"storekit: %lu products %@",
+                (unsigned long)products.count,
+                [described componentsJoinedByString:@", "]]];
+            });
+        }];
+    }];
+}
+
+/// One Buy button: the SDK's built-in store runs the whole pipeline
+/// (StoreKit sheet → JWS proof → verify → finish); this sample only renders
+/// the outcome, like a game would.
+- (void)tapBuyRow:(UIButton *)sender {
+    Open4IDStoreProduct *row = self.rowsByTag[@(sender.tag)];
+    if (!row) return;
+    [self runAction:^(NSError * _Nullable error) {
+        if (error) return;
+        [self buyRow:row];
+    }];
+}
+
+- (void)buyRow:(Open4IDStoreProduct *)row {
+    // The row in hand is exactly what the user clicked — pass it as-is so
+    // the pipeline never re-looks it up against a possibly stale snapshot.
+    __weak typeof(self) weakSelf = self;
+    [self.paymentsStore
+        purchase:row.product
+        completion:^(Open4IDPurchaseOutcome * _Nullable outcome,
+                     NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        OnMain(^{
+        if (error) {
+            [strongSelf appendLog:[NSString stringWithFormat:
+                @"buy %@: failed → %@",
+                row.product.productId, DescribeError(error)]];
+            return;
+        }
+        if (outcome.isVerified) {
+            if (outcome.receipt) {
+                [strongSelf appendLog:[NSString stringWithFormat:
+                    @"buy %@: verifyConsumable ok state=%@ quantity=%ld ref=%@",
+                    row.product.productId, outcome.receipt.state,
+                    (long)outcome.receipt.quantity, outcome.receipt.transactionRef]];
+            } else {
+                NSMutableArray<NSString *> *keys = [NSMutableArray array];
+                BOOL expiredGrant = NO;
+                for (Entitlement *entitlement in outcome.entitlements) {
+                    [keys addObject:[NSString stringWithFormat:@"%@ [%@, expires=%@]",
+                        entitlement.key, entitlement.state,
+                        entitlement.expiresAt ?: @"-"]];
+                    if ([entitlement.state isEqualToString:@"expired"]) {
+                        expiredGrant = YES;
+                    }
+                }
+                [keys sortUsingSelector:@selector(compare:)];
+                [strongSelf appendLog:[NSString stringWithFormat:
+                    @"buy %@: verifyTransaction ok, %lu entitlement(s) %@",
+                    row.product.productId, (unsigned long)outcome.entitlements.count,
+                    [keys componentsJoinedByString:@", "]]];
+                if (expiredGrant) {
+                    // Re-purchase of a lapsed subscription: Apple's sandbox
+                    // returns the existing transaction WITHOUT a sheet, so
+                    // no payment happens. Production resubscribes normally;
+                    // see the README's subscription section for the local
+                    // StoreKit path that re-purchases with a fresh sheet.
+                    [strongSelf appendLog:@"storekit: no sheet shown — Apple's sandbox "
+                        "returned the subscription's existing (lapsed) transaction "
+                        "instead of the purchase sheet, so no new payment started. "
+                        "Known sandbox limitation. In production the resubscribe sheet "
+                        "shows and starts a new cycle. To re-test here: clear the "
+                        "sandbox tester's subscription history (App Store Connect → "
+                        "Users and Access → Sandbox → the tester), or run via Xcode so "
+                        "the local StoreKit configuration applies — expired "
+                        "subscriptions re-purchase with a fresh sheet there."];
+                }
+            }
+        } else if (outcome.isPending) {
+            [strongSelf appendLog:[NSString stringWithFormat:
+                @"buy %@: pending (ask-to-buy)", row.product.productId]];
+        } else {
+            [strongSelf appendLog:[NSString stringWithFormat:
+                @"buy %@: cancelled by user", row.product.productId]];
+            if ([row.product.type isEqualToString:@"subscription"]) {
+                // Apple refuses a second purchase of a subscription the
+                // store account still holds ("You're currently subscribed
+                // to this") and surfaces it as userCancelled — no payment
+                // happens. The subscription becomes re-purchasable after
+                // it lapses.
+                [strongSelf appendLog:@"storekit: Apple refused the second purchase — "
+                    "the store account still holds an active subscription for this "
+                    "product. It becomes re-purchasable once it lapses (sandbox "
+                    "1-month ≈ 5 minutes)."];
+            }
+        }
+        });
+    }];
+}
+
+/// SDK restore through the proof source the built-in store registered
+/// (`Transaction.currentEntitlements`).
+- (void)tapRestorePurchases {
+    [self runAction:^(NSError * _Nullable error) {
+        if (error) return;
+        __weak typeof(self) weakSelf = self;
+        [self.payments restore:^(RestoreResult * _Nullable result,
+                                 NSError * _Nullable err) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            OnMain(^{
+            if (err) {
+                [strongSelf appendLog:[NSString stringWithFormat:
+                    @"failed: %@", DescribeError(err)]];
+                return;
+            }
+            [strongSelf appendLog:[NSString stringWithFormat:
+                @"restore ok: verified=%ld rejected=%ld conflict=%ld noProofs=%d",
+                (long)result.verified, (long)result.rejected, (long)result.conflict,
+                result.proofsUnavailable]];
+            });
+        }];
+    }];
+}
+
+- (void)tapEntitlements {
+    [self runAction:^(NSError * _Nullable error) {
+        if (error) return;
+        __weak typeof(self) weakSelf = self;
+        [self.entitlements
+            refresh:^(EntitlementSnapshot * _Nullable snapshot,
+                      NSError * _Nullable err) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            OnMain(^{
+            if (err) {
+                [strongSelf appendLog:[NSString stringWithFormat:
+                    @"failed: %@", DescribeError(err)]];
+                return;
+            }
+            NSMutableArray<NSString *> *list = [NSMutableArray array];
+            for (Entitlement *entitlement in snapshot.entitlements) {
+                [list addObject:[NSString stringWithFormat:
+                    @"%@ [state=%@, src=%@, product=%@, expires=%@]",
+                    entitlement.key, entitlement.state, entitlement.source,
+                    entitlement.productId ?: @"-", entitlement.expiresAt ?: @"-"]];
+            }
+            [list sortUsingSelector:@selector(compare:)];
+            [strongSelf appendLog:[NSString stringWithFormat:
+                @"entitlements: %lu -> [%@]",
+                (unsigned long)snapshot.entitlements.count,
+                [list componentsJoinedByString:@" "]]];
+            });
+        }];
+    }];
+}
+
+/// One Buy button per shop row. Rows the store could not resolve
+/// (`isResolvable == NO`) render disabled instead of disappearing, so a
+/// missing product is visible, not silent.
+- (void)rebuildBuyButtons {
+    for (UIView *view in self.buyButtonsStack.arrangedSubviews) {
+        [view removeFromSuperview];
+    }
+    [self.rowsByTag removeAllObjects];
+    if (self.shopRows.count == 0) {
+        [self.buyButtonsStack addArrangedSubview:
+            [self subtleLabel:@"(no shop rows — load the shop first)"]];
+        return;
+    }
+    NSInteger tag = 0;
+    for (Open4IDStoreProduct *row in self.shopRows) {
+        NSString *price = row.displayPrice;
+        NSString *suffix = price.length ? [NSString stringWithFormat:@" %@", price] : @"";
+        UIButton *button = [self buttonWithTitle:
+            [NSString stringWithFormat:@"Buy %@ [%@]%@",
+             row.product.productId, row.product.type, suffix]
+            action:@selector(tapBuyRow:) height:38.0f style:UIButtonTypeSystem];
+        button.tag = tag++;
+        button.enabled = row.isResolvable;
+        [self.buyButtonsStack addArrangedSubview:button];
+        self.rowsByTag[@(button.tag)] = row;
+    }
 }
 
 #pragma mark - Login UI (SDK phase 13)
