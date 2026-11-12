@@ -24,7 +24,12 @@ StoreKit prices — and one **Buy** button per row runs the SDK's purchase
 pipeline (StoreKit sheet → JWS proof → `verifyTransaction` /
 `verifyConsumable` → `Transaction.finish()`). Restore runs through the proof
 source the store registered automatically. The headless **Restore purchases**
-and **Entitlements (ledger)** buttons stay for automation logs.
+and **Entitlements (ledger)** buttons stay for automation logs. Paid state
+also rehydrates on its own: once per process, after the first bootstrap, the
+SDK refreshes a stored session's ledger rows or restores through the store's
+proof source — the session persists in the Keychain by default, so the same
+player (guest included) and their purchases come back after a relaunch or an
+uninstall/reinstall, and the **Paid state** row shows it live.
 
 ## Requirements
 

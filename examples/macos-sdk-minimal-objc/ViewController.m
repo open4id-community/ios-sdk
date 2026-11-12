@@ -24,6 +24,26 @@ static NSString *EnvDefault(NSString *name, NSString *fallback) {
 /// Typed-error detail for the log console: stable key (in
 /// `NSLocalizedDescriptionKey` / `userInfo[@"key"]`) plus field errors, so a
 /// failure names its exact gate. The proof value never reaches the string.
+/// One-line paid-state summary for the Payments section. A `nil` snapshot
+/// means "unknown" (not fetched yet) — never "not purchased".
+static NSString *PaidStateDescription(EntitlementSnapshot * _Nullable snapshot) {
+    if (!snapshot) {
+        return @"unknown (not fetched)";
+    }
+    if (snapshot.entitlements.count == 0) {
+        return @"none";
+    }
+    NSMutableArray<NSString *> *list = [NSMutableArray array];
+    for (Entitlement *entitlement in snapshot.entitlements) {
+        [list addObject:[NSString stringWithFormat:@"%@ [%@]",
+                         entitlement.key, entitlement.state]];
+    }
+    [list sortUsingSelector:@selector(compare:)];
+    return [NSString stringWithFormat:@"%lu row(s): %@",
+            (unsigned long)snapshot.entitlements.count,
+            [list componentsJoinedByString:@", "]];
+}
+
 static NSString *DescribeError(NSError *error) {
     NSString *text = error.localizedDescription;
     id rawFields = [error.userInfo objectForKey:@"field_errors"];
@@ -111,6 +131,11 @@ static void OnMain(void (^block)(void)) {
 /// the client's lifetime.
 @property (strong, nonatomic) Open4IDPayments *payments;
 @property (strong, nonatomic) Open4IDEntitlements *entitlements;
+/// Unsubscribe handle for the entitlements listener (paid-state row).
+@property (copy, nonatomic) void (^entitlementsUnsubscribe)(void);
+/// Live paid-state row: purchases, the SDK's automatic launch restore, and
+/// sign-in/sign-out all land here through `entitlements.onChanged`.
+@property (strong, nonatomic) NSTextField *paidValue;
 
 @end
 
@@ -147,8 +172,6 @@ static void OnMain(void (^block)(void)) {
         @"sdk_pk_1c91d1ee8bcf04e9226c09f291bd18c21ceeaa6f61b34203");
     self.endpointField.stringValue = EnvDefault(@"ENDPOINT",
         @"https://id.open4id.com/api");
-    // Override with OPEN4ID_ENDPOINT (or the field) to verify against a
-    // different Open4ID deployment.
     // Required by `configure`; unused by the IAP path (no login/callback).
     self.redirectUriField.stringValue = EnvDefault(@"REDIRECT_URI",
         @"com.open4id.example.ios://open4id/callback");
@@ -184,6 +207,28 @@ static void OnMain(void (^block)(void)) {
         // The namespace objects are stable for the client's lifetime.
         self.payments = self.appDelegate.client.payments;
         self.entitlements = self.appDelegate.client.entitlements;
+        // Paid state updates itself: purchases, the SDK's automatic launch
+        // restore (once per process, after the first bootstrap with a
+        // payments catalog), and sign-in/sign-out all land here. The
+        // session itself persists by default (Keychain, which outlives the
+        // app sandbox — the same account survives a reinstall), so a
+        // package bought in a previous run is active again right after a
+        // relaunch.
+        __weak typeof(self) weakSelf = self;
+        self.entitlementsUnsubscribe = [self.entitlements
+            onChanged:^(EntitlementSnapshot * _Nullable snapshot) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                strongSelf.paidValue.stringValue = [NSString stringWithFormat:
+                    @"Paid state: %@", PaidStateDescription(snapshot)];
+            });
+        }];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.paidValue.stringValue = [NSString stringWithFormat:
+                @"Paid state: %@",
+                PaidStateDescription(self.entitlements.current)];
+        });
         // One call enables the whole payment feature: products from the SDK
         // catalog request, the StoreKit purchase pipeline, the restore proof
         // source (registered on the payments namespace automatically), and
@@ -192,7 +237,6 @@ static void OnMain(void (^block)(void)) {
         // Ask-to-buy approvals and cross-device buys complete outside the
         // Buy button's pipeline; the SDK verifies and finishes them
         // automatically and reports the outcome here (main queue).
-        __weak typeof(self) weakSelf = self;
         self.store.onTransactionUpdate = ^(Open4IDPurchaseOutcome *outcome) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) { return; }
@@ -541,6 +585,8 @@ static void OnMain(void (^block)(void)) {
     [self.buyButtonsStack addArrangedSubview:
         [NSTextField labelWithString:
             @"(no shop rows — load the shop first)"]];
+    self.paidValue = [NSTextField
+        labelWithString:@"Paid state: unknown (not fetched)"];
     NSView *paymentsSection = [self sectionWithTitle:@"Payments (App Store)"
                                                views:@[
         [self actionButtonWithTitle:@"Load shop (SDK store)"
@@ -550,6 +596,7 @@ static void OnMain(void (^block)(void)) {
                              action:@selector(restoreClicked:)],
         [self actionButtonWithTitle:@"Entitlements (ledger)"
                              action:@selector(entitlementsClicked:)],
+        self.paidValue,
     ]];
 
     // Log console.

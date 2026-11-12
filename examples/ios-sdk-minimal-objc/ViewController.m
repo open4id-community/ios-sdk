@@ -38,6 +38,26 @@ static NSString *DescribeError(NSError *error) {
     return text.length ? text : @"unknown error";
 }
 
+/// One-line paid-state summary for the Payments section. A `nil` snapshot
+/// means "unknown" (not fetched yet) — never "not purchased".
+static NSString *PaidStateDescription(EntitlementSnapshot * _Nullable snapshot) {
+    if (!snapshot) {
+        return @"unknown (not fetched)";
+    }
+    if (snapshot.entitlements.count == 0) {
+        return @"none";
+    }
+    NSMutableArray<NSString *> *list = [NSMutableArray array];
+    for (Entitlement *entitlement in snapshot.entitlements) {
+        [list addObject:[NSString stringWithFormat:@"%@ [%@]",
+                         entitlement.key, entitlement.state]];
+    }
+    [list sortUsingSelector:@selector(compare:)];
+    return [NSString stringWithFormat:@"%lu row(s): %@",
+            (unsigned long)snapshot.entitlements.count,
+            [list componentsJoinedByString:@", "]];
+}
+
 @interface ViewController ()
 
 @property (strong, nonatomic) UIScrollView *scrollView;
@@ -85,6 +105,11 @@ static NSString *DescribeError(NSError *error) {
 /// payments/entitlements namespaces).
 @property (strong, nonatomic) Open4IDPayments *payments;
 @property (strong, nonatomic) Open4IDEntitlements *entitlements;
+/// Unsubscribe handle for the entitlements listener (paid-state label).
+@property (copy, nonatomic) void (^entitlementsUnsubscribe)(void);
+/// Live paid-state row: purchases, the SDK's automatic launch restore, and
+/// sign-in/sign-out all land here through `entitlements.onChanged`.
+@property (strong, nonatomic) UILabel *paidLabel;
 /// The SDK's built-in StoreKit store namespace (SDK 0.6.0
 /// `auth.storeKitPayments()`): catalog → StoreKit products join, the whole
 /// purchase pipeline, the restore proof source, and the Transaction.updates
@@ -155,6 +180,9 @@ static NSString *const kDefaultGoogleIosClientId =
 - (void)dealloc {
     if (self.authListenerUnsubscribe) {
         self.authListenerUnsubscribe();
+    }
+    if (self.entitlementsUnsubscribe) {
+        self.entitlementsUnsubscribe();
     }
 }
 
@@ -271,6 +299,13 @@ static NSString *const kDefaultGoogleIosClientId =
     [self.stackView addArrangedSubview:self.buyButtonsStack];
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Restore purchases" action:@selector(tapRestorePurchases) height:buttonHeight style:UIButtonTypeSystem]];
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Entitlements (ledger)" action:@selector(tapEntitlements) height:buttonHeight style:UIButtonTypeSystem]];
+
+    self.paidLabel = [[UILabel alloc] init];
+    self.paidLabel.text = @"Paid state: unknown (not fetched)";
+    self.paidLabel.font = [UIFont systemFontOfSize:13];
+    self.paidLabel.textColor = [UIColor secondaryLabelColor];
+    self.paidLabel.numberOfLines = 0;
+    [self.stackView addArrangedSubview:self.paidLabel];
 
     // MARK: Log section
     [self.stackView addArrangedSubview:[self sectionLabel:@"Log"]];
@@ -443,6 +478,27 @@ static NSString *const kDefaultGoogleIosClientId =
         // The namespace objects are stable for the client's lifetime.
         self.payments = client.payments;
         self.entitlements = client.entitlements;
+        // Paid state updates itself: purchases, the SDK's automatic launch
+        // restore (once per process, after the first bootstrap with a
+        // payments catalog), and sign-in/sign-out all land here. The
+        // session itself persists by default (Keychain, which outlives the
+        // app sandbox — the same guest account survives a reinstall), so a
+        // package bought in a previous run is active again right after a
+        // relaunch.
+        __weak typeof(self) weakSelf = self;
+        self.entitlementsUnsubscribe = [self.entitlements
+            onChanged:^(EntitlementSnapshot * _Nullable snapshot) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                strongSelf.paidLabel.text = [NSString stringWithFormat:
+                    @"Paid state: %@", PaidStateDescription(snapshot)];
+            });
+        }];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.paidLabel.text = [NSString stringWithFormat:@"Paid state: %@",
+                PaidStateDescription(self.entitlements.current)];
+        });
         // One call enables the whole payment feature: products from the SDK
         // catalog request, the StoreKit purchase pipeline, the restore proof
         // source (registered on the payments namespace automatically), and
@@ -451,7 +507,6 @@ static NSString *const kDefaultGoogleIosClientId =
         // Ask-to-buy approvals and cross-device buys complete outside the
         // Buy button's pipeline; the SDK verifies and finishes them
         // automatically and reports the outcome here (main queue).
-        __weak typeof(self) weakSelf = self;
         self.paymentsStore.onTransactionUpdate = ^(Open4IDPurchaseOutcome *outcome) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) { return; }

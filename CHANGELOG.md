@@ -8,6 +8,76 @@ GitHub SPM mirror
 `sdks/ios/dist/` with `SHA256SUMS` for Objective-C / binary consumers.
 The monorepo tags every release `ios-v<version>` (lineage marker).
 
+## 0.7.0 (2026-11-12)
+
+- **ObjC session persistence (no Swift shim).** `SessionStore` is now an
+  `@objc` protocol and `KeychainSessionStore` is `@objcMembers`, so an
+  Objective-C / Objective-C++ host enables persistence with
+  `[client setSessionStore:[[KeychainSessionStore alloc] init]]` — or
+  implements its own `Open4IDSessionStore` backend — without adding a
+  Swift file. `setSessionStoreMemoryOnly` stays the memory-only opt-out.
+- **Time-aware entitlement usability.** `Entitlement.isUsable` now treats
+  a cached `active` row past its `expiresAt` as unusable (the server
+  recomputes on read, but between refreshes the client owns the check),
+  while a `grace` row keeps its original (past) expiry by design — the
+  grace-window end is server-side and arrives as the next state on a later
+  read. Parsed dates (`expiresAtDate`/`grantedAtDate`/`updatedAtDate`,
+  `remainingSeconds`), `has(_:at:)`, snapshot and client `hasAny(_:)`,
+  `isPurchased(productId:)` (catalog row → entitlement keys), and
+  `entitlement(_:)` round out the surface.
+- **Launch restore reconciles with the store.** When a proof source is
+  registered, the stored-session hydration now also submits the store's
+  current receipts instead of only refreshing the ledger: renewals
+  recorded only by the store, and purchases made before persistence
+  existed, repair themselves at launch without a Restore tap.
+- **Store facts on the purchase outcome.** `Open4IDPurchaseOutcome`
+  carries `expirationDate`, `originalPurchaseDate`, and `environment`
+  (`Sandbox`/`Production`/`Xcode`) parsed from the StoreKit transaction —
+  hosts answer "does Apple think this is still active?" without importing
+  StoreKit.
+- **Opt-in diagnostics.** `Open4IDDiagnostics.level = .info` +
+  `Open4IDDiagnostics.onLog` emit redacted lines (config with the masked
+  SDK key, entitlement rows on every publish, restore counts, verify
+  results, launch-hydration failures as error keys). Off by default; the
+  JWS, tokens, and the full key are never logged.
+- **XCFramework ships a Clang module.** Each slice now carries
+  `Headers/module.modulemap` over the generated interface, so
+  `@import Open4IDSDK;` works without a hand-written module map
+  (Objective-C++ hosts still need `-fcxx-modules`; see the guide).
+- **Store timing and environment docs.** The guide adds the
+  sandbox/TestFlight renewal-rate table, the SDK-environment vs
+  store-environment mapping, App Store Server Notifications guidance, and
+  a "Subscription still active after 5 minutes" troubleshooting entry.
+- **The session persists by default (Keychain).** `configure` without a
+  `store` falls back to `KeychainSessionStore()` instead of the previous
+  memory-only default: the session — and the guest identity behind it —
+  survives relaunches and, because Keychain items outlive the app sandbox,
+  uninstall/reinstall cycles. The same player keeps the same account, the
+  server ledger keeps binding grants to it, and the launch restore (below)
+  rehydrates paid state without needing store proofs. Opt out with
+  `setSessionStore(nil)` (sticky memory-only; also bridged to Objective-C
+  as `setSessionStoreMemoryOnly`) or pass `MemorySessionStore()` explicitly
+  (tests, kiosks, multi-tenant shells). Together with the launch restore
+  this fixes "paid a package, killed the app, reopened — paid state gone".
+- **Paid state survives a restart (launch restore).** After the first
+  `bootstrap()` that advertises a payments catalog, the SDK rehydrates paid
+  state once per process: a stored session refreshes its ledger rows, and a
+  missing session signs in as a guest (when guest login is enabled) and
+  restores through the registered proof source — so a package bought in a
+  previous run is active again after relaunch without host code. The result
+  arrives through `entitlements().onChanged` like every other publish; a
+  failure stays silent and leaves paid state "unknown" (the host's explicit
+  `restore()` / `refresh()` still work unchanged). Opt out with
+  `payments().autoRestoreOnLaunch = false` set before the first
+  `bootstrap()`. Creating `storeKitPayments()` after the bootstrap runs one
+  idempotent retry with the built-in proof source, so a store set up late
+  still repairs a session that did not survive the restart.
+- Example (`examples/ios-sdk-minimal`): the session now persists across
+  relaunches (`configure(store: KeychainSessionStore())` — the same player
+  identity keeps the ledger binding and consumable deliveries idempotent),
+  and the Payments section shows the live paid state driven by
+  `entitlements().onChanged`.
+
 ## 0.6.0 (2026-11-04)
 
 - **Built-in StoreKit 2 payments store** (`PaymentsStoreKit.swift`): the
@@ -81,7 +151,7 @@ The monorepo tags every release `ios-v<version>` (lineage marker).
   (`payments()`), `Open4IDEntitlements` (`entitlements()`), and the
   `PaymentsTypes` value types, with `@objc` bridges matching the existing
   Objective-C surface. The SDK never opens a purchase sheet and adds no
-  package dependency: the game buys through StoreKit forwards the StoreKit 2 `jwsRepresentation` with
+  package dependency: the game buys through StoreKit, Unity IAP and forwards the StoreKit 2 `jwsRepresentation` with
   `verifyTransaction(TransactionProof.appStore(...))`. Core API
   re-verifies the JWS with Apple before granting anything; there is no
   `verifyReceipt` fallback.

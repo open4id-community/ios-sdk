@@ -8,7 +8,7 @@ action order, and an append-only log console.
 
 - Xcode 15+ (verified with Xcode 27.1), iOS 16+ simulator or device.
 - The app links the SDK as the prebuilt **XCFramework**
-  (`../../Open4IDSDK-0.6.0.xcframework`, repo root) — no registry dependency.
+  (`../../Open4IDSDK-0.7.0.xcframework`, repo root) — no registry dependency.
   GoogleSignIn is resolved via SPM from the sample project.
 
 ## Build & run
@@ -73,7 +73,12 @@ store)** and the sample renders one Buy button per `Open4IDStoreProduct` row
 samples. Products resolve through the scheme's StoreKit test configuration
 (`examples/Open4IDStoreConfig.storekit`) on the simulator and through the
 App Store sandbox on a real device. A purchase with no active session signs
-in as a guest automatically.
+in as a guest automatically. Paid state also rehydrates on its own: once per
+process, after the first bootstrap, the SDK refreshes a stored session's
+ledger rows or restores through the store's proof source — and the session
+persists in the Keychain by default, so the same player (guest included) and
+their purchases come back after a relaunch or even an uninstall/reinstall.
+The **Paid state** row below the buttons shows this live.
 
 ## Login UI
 

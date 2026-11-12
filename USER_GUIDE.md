@@ -97,6 +97,14 @@ simulator slice (`ios-arm64_x86_64-simulator`), built with library evolution
 enabled so the binary remains ABI-stable across future Xcode
 toolchains.
 
+Each slice ships a Clang module (`Headers/module.modulemap` over the
+generated `Open4IDSDK-Swift.h`), so Objective-C hosts get the SDK as a
+module: add the slices' `Headers` directory to `HEADER_SEARCH_PATHS` and
+`@import Open4IDSDK;` resolves without hand-writing a module map. For an
+**Objective-C++** host, keep `-fcxx-modules` on the files that import it —
+the generated Swift header contains `@import AuthenticationServices;`, and
+clang rejects `@import` inside C++ unless modules are enabled for C++ too.
+
 A Swift package resolved via SPM is not directly callable from Objective-C —
 choose SPM consumption for Swift apps and the XCFramework for
 Objective-C and game-engine apps.
@@ -217,14 +225,21 @@ do {
 }
 ```
 
-> **Non-persisted by default:** the default in-memory store loses the
-> session when the process exits. To keep players signed in across launches,
-> pass the Keychain adapter to `configure`:
+> **Persisted by default:** `configure` without a `store` falls back to
+> the Keychain adapter, so the session — and the guest identity behind it
+> — survives relaunches and reinstall cycles (Keychain items outlive the
+> app sandbox). The same player keeps the same account, and the launch
+> restore finds their grants without store proofs:
 >
 > ```swift
-> try auth.configure(
->     ...,
->     store: KeychainSessionStore())
+> // default: KeychainSessionStore() — nothing to pass
+> try auth.configure(...)
+>
+> // opt out (tests, kiosks, multi-tenant shells): memory-only, sticky
+> auth.setSessionStore(nil)            // or setSessionStoreMemoryOnly() from Objective-C
+>
+> // or namespace one process that embeds several Open4ID applications
+> try auth.configure(..., store: KeychainSessionStore(service: "com.game.app1"))
 > ```
 >
 > The adapter stores one generic-password Keychain item per `service`/
@@ -262,6 +277,15 @@ if (error) {
     // error.userInfo[@"key"] == stable key (e.g. "client.auth.invalid_request")
     return;
 }
+
+// Session persistence works from Objective-C too — `SessionStore` is an
+// @objc protocol and `KeychainSessionStore` is the shipped default:
+[auth setSessionStore:[[KeychainSessionStore alloc] init]];                       // default shape
+[auth setSessionStore:[[KeychainSessionStore alloc]
+                              initWithService:@"com.game.open4id"
+                                      account:@"app_9f3ab2c1"]];                // namespaced
+// Or implement `Open4IDSessionStore` yourself (load/save/clear over
+// your own storage). Memory-only opt-out: [auth setSessionStoreMemoryOnly];
 
 // Listen to login-state changes (sign-in, sign-out, refresh, delete).
 void (^unsubscribe)(void) = [auth onAuthStateChanged:^(AuthSession * _Nullable session,
@@ -680,12 +704,25 @@ player to sign in as the owning account.
 
 ### Restore and read entitlements
 
-Restore is what the app calls at startup and behind a "Restore purchases"
-button. It recovers a purchase in both lifecycle cases: a restart with the
-stored session recomputes the same player's rows, and a reinstall starts as a
-fresh guest whose anonymous binding is moved by a store-verified proof. To
-cover the second case without collecting proofs at every call site, register a
-proof source once:
+The SDK restores on its own: once per process, after the first `bootstrap()`
+that advertises a payments catalog, it rehydrates paid state — a stored
+session refreshes its ledger rows and, when a proof source is registered
+(the built-in store registers one), also submits the store's current
+receipts, so renewals recorded only by the store and purchases made before
+persistence existed repair themselves at launch; a missing session signs in
+as a guest (when guest login is enabled) and restores through the
+registered proof source. The result lands in the same snapshot and
+`onChanged` fires, so a purchase made in a previous run is usable again
+right after a restart or a reinstall, with no host code. Set
+`auth.payments().autoRestoreOnLaunch = false` before the first `bootstrap()`
+if you want paid state to be strictly host-driven.
+
+You can still restore explicitly behind a "Restore purchases" button — the
+same call the SDK schedules at launch: it recovers a purchase in both
+lifecycle cases (a restart with the stored session recomputes the same
+player's rows, and a reinstall starts as a fresh guest whose anonymous
+binding is moved by a store-verified proof). To cover the second case
+without collecting proofs at every call site, register a proof source once:
 
 ```swift
 final class StoreProofs: PaymentProofSource {
@@ -736,12 +773,21 @@ let unsubscribe = auth.entitlements().onChanged { snapshot in
 
 Entitlement states are `active`, `grace`, `expired`, and `revoked`. Only
 `active` and `grace` are usable; expired and revoked rows stay in `list()`
-so you can show history. `expiresAt` is `nil` for non-expiring one-time
-grants. The device stores the session and never the grants: the in-memory
-snapshot is `nil` on a cold start until the first read and is cleared whenever
-the signed-in player changes or signs out, so one player's grants never leak
+so you can show history. Usability is time-aware: `has`/`isUsable` treat a
+cached `active` row whose `expiresAt` has passed as unusable even before
+the next refresh recomputes it (parse dates yourself with
+`expiresAtDate`/`remainingSeconds` when you need to display time left).
+`grace` is exempt — Core API keeps a grace row's `expiresAt` at the
+original period end while the store's billing-retry window runs, and the
+grace-window end is the server's decision (it arrives as the next state on
+a later read). `expiresAt` is `nil` for non-expiring one-time
+grants. The device stores the session and never the grants: the snapshot is
+re-fetched from the ledger, not replayed from disk. On a cold start it is
+`nil` until the SDK's automatic launch restore (see above) or your first
+explicit `refresh()` / `restore()` fills it, and it is cleared whenever the
+signed-in player changes or signs out, so one player's grants never leak
 into another session. Treat a missing snapshot as **unknown**, not as "not
-purchased".
+purchased", and drive UI from `onChanged` rather than a one-time read.
 
 Payment calls keep their own token fresh: `verifyTransaction`,
 `restore`, and `entitlements().refresh()` rotate a stale access token
@@ -772,6 +818,52 @@ keyed by `receipt.transactionRef` and grants nothing unless the state is
 for entitlement products and skips the entitlement publish whenever the
 response carries a `delivery` block, so a consumable payload cannot clear the
 cached snapshot.
+
+## Store timing and environments (sandbox and TestFlight)
+
+Subscription periods in testing do not match wall-clock durations. Before
+reporting "the ledger expired my subscription after 5 minutes", check this
+table — in almost every case the ledger mirrors the store exactly (the
+outcome's `expirationDate` and the entitlement row's `expiresAt` agree):
+
+| Distribution | 1 week | 1 month | 2 months | 3 months | 6 months | 1 year |
+| --- | --- | --- | --- | --- | --- | --- |
+| Xcode (local StoreKit configuration) | follows the `.storekit` file | | | | | |
+| TestFlight (since Dec 2024) | 1 day | 1 day | 1 day | 1 day | 1 day | 1 day |
+| Sandbox Apple Account (default) | 3 min | 5 min | 10 min | 15 min | 30 min | 1 hour |
+
+Facts worth knowing before debugging:
+
+- The ledger's `expiresAt` mirrors StoreKit's `expirationDate` — the two
+  always agree; a 24-hour expiry is the daily **TestFlight** renewal rate,
+  not a stale or incorrect grant.
+- **TestFlight** subscriptions renew up to 6 times per week, so a
+  subscription can stay `active` for several days.
+- The **Sandbox Apple Account** renewal rate is configurable: App Store
+  Connect → Users and Access → Sandbox → *Subscription Renewal Rate*.
+- Clearing a sandbox account's purchase history does **not** revoke a grant
+  the ledger already recorded — sign the test player out of the
+  application (or ask support to clear the binding) to test the
+  not-purchased path.
+
+### SDK environment vs store environment
+
+Two independent axes; a mismatch is the usual cause of
+`client.payment.verification_failed`:
+
+| SDK `environment` (configure + Portal) | Store environment you should test with |
+| --- | --- |
+| `development` / `sandbox` | `Sandbox` — App Store sandbox account, or `Xcode` with a local `.storekit` configuration |
+| `production` | `Production` — App Store live; TestFlight builds also report `Production`-eligible receipts but are typically tested against a `sandbox` configured app |
+
+Core API pins the Apple root certificate and the JWS `environment` claim on
+every verification, so a `Production` receipt never unlocks a
+`development` app or vice versa. For renewals, expiries, and refunds to
+reach the ledger without the app running, configure **App Store Server
+Notifications V2** in App Store Connect (Version 2 endpoint, the URL the
+Open4ID console shows under Payments → Apple) — the SDK's
+`Transaction.updates` listener only covers purchases made on this device
+while it runs.
 
 ## Payments in Objective-C
 
@@ -929,10 +1021,35 @@ and `userInfo` carries `key`, `error_code` (and, when applicable,
 
 ## Token storage
 
+## Opt-in diagnostics
+
+The SDK never logs by default. When support needs visibility, opt in once
+at launch:
+
+```swift
+Open4IDDiagnostics.level = .info
+Open4IDDiagnostics.onLog = { line in
+    // your logger / console / crash reporter; called on an SDK thread
+    print(line)
+}
+```
+
+`.info` emits redacted lifecycle lines only: the effective configuration
+with the SDK key masked to its last four characters, every entitlement
+snapshot publish (`key/state/expiresAt/source` per row — the launch
+restore, refreshes, restores, and purchases all land here), restore counts
+(`verified/rejected/conflict/proofsUnavailable`), store verification
+results (product id, kind), and launch-hydration failures as error keys.
+Never logged: the JWS, access/refresh tokens, the full SDK key, or any
+player credential. From Objective-C the same surface is
+`Open4IDDiagnostics.level` / `Open4IDDiagnostics.onLog`.
+
+## Token storage
+
 | Backend | Default | Notes |
 |---------|---------|-------|
-| `MemorySessionStore` | yes | In-memory only; session is lost when the process dies. |
-| `KeychainSessionStore` | opt-in | Generic-password item per `service`/`account`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. |
+| `KeychainSessionStore` | yes | Generic-password item per `service`/`account`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`; survives relaunches and reinstalls. |
+| `MemorySessionStore` | no (opt-out) | In-memory only; session is lost when the process dies. Pass it to `configure(store:)` or `setSessionStore(nil)` for tests, kiosks, or multi-tenant shells. |
 
 The Keychain adapter is best-effort: I/O failures never break sign-in (the
 last `OSStatus` is exposed on `lastStatus` for diagnostics), and corrupt or
@@ -999,5 +1116,8 @@ Pass the store at `configure`; switch the backend at runtime with
 | `client.auth.popup_timeout` from Apple/GitHub/Facebook | The custom scheme is not registered in URL Types, or the sign-in browser was dismissed/blocked; re-register the scheme and call again. |
 | `client.auth.provider_unavailable` when calling Google on iOS | Expected — implement/override `getGoogleAuthorizationCode` or register a provider (see [Social providers](#social-providers)). |
 | `SdkRateLimitedError` (`150001`) | Rate limit hit; honor `retryAfterSec` before retrying the same request. |
-| Keychain item missing after relaunch | No store passed at configure time — pass `KeychainSessionStore(...)`; also check `lastStatus`. |
-| Session lost on short backgrounding | On iOS, OS may kill the process in background. Ensure a persistent store to survive process death. |
+| Keychain item missing after relaunch | The Keychain adapter is the default; if the session is still missing, check `lastStatus` on the store and that the item was not wiped by a device reset or a shared `service`/`account` collision. |
+| Session lost on short backgrounding | On iOS, OS may kill the process in background. The default Keychain store restores the session on relaunch; if you opted out to memory-only, reconfigure with the Keychain adapter. |
+| Paid state missing after relaunch | The launch restore rehydrates grants once per process after the first bootstrap (catalog enabled). If it is still missing: check that `storeKitPayments()` (or a proof source) is set up before the bootstrap so store proofs are available, that guest login is enabled or a session is stored (the default Keychain adapter covers both), and that `autoRestoreOnLaunch` was not set to `false`. Watch `entitlements().onChanged` instead of a one-time `has()` read. |
+| Subscription still active after 5 minutes | Expected in testing: a sandbox 1-month subscription lasts 5 minutes, but a **TestFlight** 1-month subscription lasts 24 hours and renews up to 6 times per week — the ledger's `expiresAt` mirrors StoreKit's `expirationDate` exactly. See [Store timing and environments](#store-timing-and-environments-sandbox-and-testflight). |
+| Same player became a different guest after reinstall | The default Keychain session survives reinstalls; a changed guest identity means something cleared the item (device reset, custom `service`/`account`) or persistence was opted out. Purchases recover through the launch restore's store proofs for non-consumables and subscriptions; consumables need the session to survive. |

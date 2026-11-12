@@ -63,6 +63,19 @@ struct ContentView: View {
 
     // MARK: - Payments (App Store)
 
+    /// One Keychain store instance reused by every `configure` call: the
+    /// session (and the guest/player identity behind it) survives relaunches,
+    /// so the server ledger keeps binding grants to the same player,
+    /// consumable deliveries stay idempotent, and the SDK's launch restore
+    /// finds the player without needing store proofs.
+    private let sessionStore = KeychainSessionStore()
+
+    /// Live paid-state line for the Payments section, driven by
+    /// `entitlements().onChanged`: the SDK refreshes it on purchase, on the
+    /// automatic launch restore, and on sign-in/sign-out.
+    @State private var paidText = "unknown (not fetched)"
+    @State private var paidUnsubscribe: (() -> Void)?
+
     /// Shop rows from the SDK's built-in store: the `app_store` catalog rows
     /// joined with the StoreKit products (name/price). The sample renders one
     /// Buy button per row; the SDK owns everything behind the button. There
@@ -133,6 +146,7 @@ struct ContentView: View {
                     }
                     Button("Restore purchases") { run(restorePurchases) }
                     Button("Entitlements (ledger)") { run(refreshEntitlements) }
+                    LabeledContent("Paid state", value: paidText)
                     LabeledContent("StoreKit", value: "\(shopRows.count) products")
                 }
 
@@ -174,6 +188,16 @@ struct ContentView: View {
                 }
             }
             authModel.addListener(authListener)
+            // Paid state updates itself: purchases, the SDK's automatic
+            // launch restore, and sign-in/sign-out all land here. The SDK
+            // rehydrates grants once per process after the first bootstrap,
+            // so this flips back to paid shortly after a relaunch.
+            paidUnsubscribe = appClient.entitlements().onChanged { snapshot in
+                DispatchQueue.main.async {
+                    paidText = Self.paidDescription(snapshot)
+                }
+            }
+            paidText = Self.paidDescription(appClient.entitlements().current())
             // The GitHub/Apple web sessions present from the first scene window.
             appClient.setPresentationAnchor {
                 UIApplication.shared.connectedScenes
@@ -292,9 +316,21 @@ struct ContentView: View {
                                 publicSdkKey: publicSdkKey,
                                 endpoint: endpoint,
                                 redirectUri: redirectUri,
-                                bundleId: bundleId)
+                                bundleId: bundleId,
+                                store: sessionStore)
         // Never resets session state, so this is safe on every configure.
         try appClient.setPortalOrigin(portalOrigin)
+    }
+
+    /// One-line paid-state summary for the Payments section.
+    private static func paidDescription(_ snapshot: EntitlementSnapshot?) -> String {
+        guard let snapshot else { return "unknown (not fetched)" }
+        guard !snapshot.entitlements.isEmpty else { return "none" }
+        let list = snapshot.entitlements
+            .map { "\($0.key) [\($0.state)]" }
+            .sorted()
+            .joined(separator: ", ")
+        return "\(snapshot.entitlements.count) row(s): \(list)"
     }
 
     /// Binds the login-UI view model to the current client + bootstrap

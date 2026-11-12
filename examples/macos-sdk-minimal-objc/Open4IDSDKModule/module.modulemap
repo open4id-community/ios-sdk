@@ -9,7 +9,7 @@
 //
 //   Open4IDSDKModule/
 //     module.modulemap        <- this map
-//     Open4IDSDK-Swift.h      -> ../../ Open4IDSDK-0.6.0.xcframework macOS slice
+//     Open4IDSDK-Swift.h      -> ../../ Open4IDSDK-0.7.0.xcframework macOS slice
 //
 // The symlink targets the **macOS** slice of the framework (the AppKit
 // facade and the payments surface live there). Linking uses the

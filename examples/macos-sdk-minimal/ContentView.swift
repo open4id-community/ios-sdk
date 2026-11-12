@@ -44,6 +44,16 @@ struct ContentView: View {
     @State private var logLines: [String] = ["[open4id-iap] Ready (macOS)."]
     @State private var busy = false
 
+    // MARK: - Payments state
+
+    /// Live paid-state line, driven by `entitlements().onChanged`: the SDK
+    /// refreshes it on purchase, on the automatic launch restore, and on
+    /// sign-in/sign-out. The session itself persists by default (Keychain),
+    /// so a package bought in a previous run is active again right after a
+    /// relaunch.
+    @State private var paidText = "unknown (not fetched)"
+    @State private var paidUnsubscribe: (() -> Void)?
+
     // MARK: - Shop (host-owned UI over the SDK's built-in store)
 
     /// Shop rows from the SDK: the `app_store` catalog rows joined with the
@@ -88,6 +98,7 @@ struct ContentView: View {
                     }
                     Button("Restore purchases") { run(restorePurchases) }
                     Button("Entitlements (ledger)") { run(refreshEntitlements) }
+                    LabeledContent("Paid state", value: paidText)
                     LabeledContent("StoreKit", value:
                         "\(shopRows.filter { $0.isResolvable }.count) products")
                 }
@@ -111,6 +122,15 @@ struct ContentView: View {
         }
         .frame(minWidth: 680, minHeight: 520)
         .onAppear {
+            // Paid state updates itself: purchases, the SDK's automatic
+            // launch restore (once per process, after the first bootstrap
+            // with a payments catalog), and sign-in/sign-out all land here.
+            paidUnsubscribe = appClient.entitlements().onChanged { snapshot in
+                Task { @MainActor in
+                    paidText = Self.paidDescription(snapshot)
+                }
+            }
+            paidText = Self.paidDescription(appClient.entitlements().current())
             // Auto configure + bootstrap on launch so a launch proves the
             // live path in the console without tapping anything. Bootstrap is
             // what loads the payment catalog and enables the guest session
@@ -200,6 +220,17 @@ struct ContentView: View {
                                 endpoint: endpoint,
                                 redirectUri: redirectUri,
                                 bundleId: bundleId)
+    }
+
+    /// One-line paid-state summary for the Payments section.
+    private static func paidDescription(_ snapshot: EntitlementSnapshot?) -> String {
+        guard let snapshot else { return "unknown (not fetched)" }
+        guard !snapshot.entitlements.isEmpty else { return "none" }
+        let list = snapshot.entitlements
+            .map { "\($0.key) [\($0.state)]" }
+            .sorted()
+            .joined(separator: ", ")
+        return "\(snapshot.entitlements.count) row(s): \(list)"
     }
 
     private func append(_ line: String) {
