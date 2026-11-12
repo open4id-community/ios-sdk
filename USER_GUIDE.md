@@ -97,13 +97,19 @@ simulator slice (`ios-arm64_x86_64-simulator`), built with library evolution
 enabled so the binary remains ABI-stable across future Xcode
 toolchains.
 
-Each slice ships a Clang module (`Headers/module.modulemap` over the
-generated `Open4IDSDK-Swift.h`), so Objective-C hosts get the SDK as a
-module: add the slices' `Headers` directory to `HEADER_SEARCH_PATHS` and
-`@import Open4IDSDK;` resolves without hand-writing a module map. For an
-**Objective-C++** host, keep `-fcxx-modules` on the files that import it —
-the generated Swift header contains `@import AuthenticationServices;`, and
-clang rejects `@import` inside C++ unless modules are enabled for C++ too.
+The slices deliberately ship **no Clang module**: a `module.modulemap`
+named `Open4IDSDK` inside the artifact shadows the Swift module for SPM
+consumers (the library-evolution header marks the Swift classes
+unavailable, so `import Open4IDSDK` stops compiling). Objective-C
+consumers therefore import the generated interface directly
+(`#import <Open4IDSDK/Open4IDSDK-Swift.h>` after adding the slice's
+`Headers` directory to `HEADER_SEARCH_PATHS`), or use the
+`Open4IDSDKModule` module-map adapter shipped with the public examples
+(`-fmodule-map-file=…`, giving `@import Open4IDSDK;` from pure ObjC). For
+an **Objective-C++** host, keep `-fcxx-modules` on the files that import
+it — the generated Swift header contains
+`@import AuthenticationServices;`, and clang rejects `@import` inside C++
+unless modules are enabled for C++ too.
 
 A Swift package resolved via SPM is not directly callable from Objective-C —
 choose SPM consumption for Swift apps and the XCFramework for
@@ -721,7 +727,8 @@ You can still restore explicitly behind a "Restore purchases" button — the
 same call the SDK schedules at launch: it recovers a purchase in both
 lifecycle cases (a restart with the stored session recomputes the same
 player's rows, and a reinstall starts as a fresh guest whose anonymous
-binding is moved by a store-verified proof). To cover the second case
+binding is moved by a store-verified proof — the previous owner's derived
+rows are dropped in the same operation). To cover the second case
 without collecting proofs at every call site, register a proof source once:
 
 ```swift
@@ -771,8 +778,28 @@ let unsubscribe = auth.entitlements().onChanged { snapshot in
 }
 ```
 
-Entitlement states are `active`, `grace`, `expired`, and `revoked`. Only
-`active` and `grace` are usable; expired and revoked rows stay in `list()`
+**What restore cannot recover.** A proof only exists for purchases the
+store still reports, and only moves bindings owned by an anonymous guest.
+A reinstall with a lost session therefore recovers every non-consumable
+purchase and subscription, but not:
+
+- **Finished consumables** — Apple removes them from
+  `currentEntitlements` once finished, and their delivery record stays
+  bound to the previous guest. This is why the session persists in the
+  Keychain by default (0.7.0): with the session intact the same player
+  keeps consumable delivery history. Game-side, re-deliver consumables
+  from your persisted `transactionRef` records, never from a live query.
+- **A purchase whose owner upgraded to an email/social account** — counted
+  as `conflict`; ask the player to sign in as the owning account.
+- **Purchases the device's store account no longer reports** (different
+  Apple ID signed in, refunded, or removed) — `proofsUnavailable` /
+  `rejected`.
+- **Offline** — StoreKit's collection is local, but verification and the
+  ledger are server-side; restore needs connectivity and is the moment to
+  gate features as "checking" rather than "locked" (see the offline
+  cold-start pattern under *Entitlement states* below).
+
+Entitlement states are `active`, `grace`, `expired`, and `revoked`. Only`active` and `grace` are usable; expired and revoked rows stay in `list()`
 so you can show history. Usability is time-aware: `has`/`isUsable` treat a
 cached `active` row whose `expiresAt` has passed as unusable even before
 the next refresh recomputes it (parse dates yourself with
@@ -788,6 +815,19 @@ explicit `refresh()` / `restore()` fills it, and it is cleared whenever the
 signed-in player changes or signs out, so one player's grants never leak
 into another session. Treat a missing snapshot as **unknown**, not as "not
 purchased", and drive UI from `onChanged` rather than a one-time read.
+
+**Offline cold starts and the three-state check.** The launch restore is
+best-effort: offline it fails silently and the snapshot stays `nil` until
+connectivity returns (then the next `refresh()`/`restore()`/purchase
+publishes and `onChanged` fires). Gate features on all three states —
+`has(key)` when known-usable, "checking/try online" when the snapshot is
+`nil`, locked only when the snapshot exists and the row is absent,
+`expired`, or `revoked`. Two host-side patterns cover an offline start
+without ever painting "locked" for an unknown: keep your own
+last-known-usable-keys cache (keyed by `userId`, honoring `expiresAt` for
+subscriptions; OR it in only while the snapshot is `nil`), and/or fall back
+to StoreKit's `Transaction.currentEntitlements`, which StoreKit caches
+offline. Never derive "locked" from a `nil` snapshot.
 
 Payment calls keep their own token fresh: `verifyTransaction`,
 `restore`, and `entitlements().refresh()` rotate a stale access token
@@ -856,11 +896,11 @@ Two independent axes; a mismatch is the usual cause of
 | `development` / `sandbox` | `Sandbox` — App Store sandbox account, or `Xcode` with a local `.storekit` configuration |
 | `production` | `Production` — App Store live; TestFlight builds also report `Production`-eligible receipts but are typically tested against a `sandbox` configured app |
 
-Core API pins the Apple root certificate and the JWS `environment` claim on
-every verification, so a `Production` receipt never unlocks a
-`development` app or vice versa. For renewals, expiries, and refunds to
-reach the ledger without the app running, configure **App Store Server
-Notifications V2** in App Store Connect (Version 2 endpoint, the URL the
+The pairing is enforced server-side on every verification: a `Production`
+receipt never unlocks a `development` application, and the other way
+around — no client field can override it. For renewals, expiries, and
+refunds to reach the ledger without the app running, configure **App Store
+Server Notifications V2** in App Store Connect (the endpoint URL the
 Open4ID console shows under Payments → Apple) — the SDK's
 `Transaction.updates` listener only covers purchases made on this device
 while it runs.
@@ -1005,7 +1045,7 @@ can change between minor versions:
 | `SdkConflictError` | `140006` | Purchase bound to another credentialed account (`client.payment.owned_by_another_account`); restore reports it as `conflict` instead. |
 | `SdkRateLimitedError` | `150001` | Rate limit; carries `retryAfterSec` (-1 when the server did not specify). |
 | `SdkUnavailableError` | `160001` | Core API or transport unavailable (timeout, HTTP 5xx, connectivity). |
-| `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. Subclasses `SdkUnavailableError`. A `503` on **every** verify is not transient — on the App Store path it has two per-node causes: the Portal's Payments → App Store section not saved for the `(app, environment)` the client asserts (`bundle_id` empty or `notification_environment` invalid; a disabled provider or unknown product answers `400 invalid` instead), or the node missing its pinned Apple root (`priv/payment/apple_root_ca_g3.pem` must ship with the release — a missing/mismatched file answers 503 before the JWS is read; if another node sharing the database verifies fine, it is this one). The Vault key is not used by verification. |
+| `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. A `503` on **every** verify is not transient — it means the deployment's App Store configuration is incomplete: check the Portal's Payments → App Store section for the `(app, environment)` the client asserts (`bundle_id` empty or `notification_environment` invalid; a disabled provider or unknown product answers `400 invalid` instead). If the Portal looks right, contact the node operator — it is a server-side deployment issue, not a client or device problem. |
 | `SdkInternalError` | `170001` | Unexpected internal failure. |
 | `SdkNotImplementedError` | `-1` | Method awaiting its implementation phase (rare; only ahead of a shipped feature). |
 
@@ -1120,4 +1160,5 @@ Pass the store at `configure`; switch the backend at runtime with
 | Session lost on short backgrounding | On iOS, OS may kill the process in background. The default Keychain store restores the session on relaunch; if you opted out to memory-only, reconfigure with the Keychain adapter. |
 | Paid state missing after relaunch | The launch restore rehydrates grants once per process after the first bootstrap (catalog enabled). If it is still missing: check that `storeKitPayments()` (or a proof source) is set up before the bootstrap so store proofs are available, that guest login is enabled or a session is stored (the default Keychain adapter covers both), and that `autoRestoreOnLaunch` was not set to `false`. Watch `entitlements().onChanged` instead of a one-time `has()` read. |
 | Subscription still active after 5 minutes | Expected in testing: a sandbox 1-month subscription lasts 5 minutes, but a **TestFlight** 1-month subscription lasts 24 hours and renews up to 6 times per week — the ledger's `expiresAt` mirrors StoreKit's `expirationDate` exactly. See [Store timing and environments](#store-timing-and-environments-sandbox-and-testflight). |
+| Restore after reinstall recovered nothing | Check in order: the device's App Store account is the purchasing one (`StoreKit` reports `currentEntitlements`); the products are non-consumables or subscriptions (finished **consumables** never re-appear — they need the Keychain-persisted session from 0.7.0); the previous owner never upgraded to an email/social account (`conflict` otherwise); and the device is online (verification is server-side). `result.proofsUnavailable == true` means no proof was collected at all. |
 | Same player became a different guest after reinstall | The default Keychain session survives reinstalls; a changed guest identity means something cleared the item (device reset, custom `service`/`account`) or persistence was opted out. Purchases recover through the launch restore's store proofs for non-consumables and subscriptions; consumables need the session to survive. |
