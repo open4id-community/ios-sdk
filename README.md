@@ -18,6 +18,7 @@ through SwiftPM instead:
 | 0.5.0   | `Open4IDSDK-0.5.0.xcframework.zip` | `94e51e641657dcc61ad230d893c4d8deeffcf785862f04087f75e552b6d3930f` |
 | 0.6.0   | `Open4IDSDK-0.6.0.xcframework.zip` | `4cc5fa555d1f412b37a653b4e7a1fcf603eeb91f67e2eaec330d703b5223910c` |
 | 0.7.0   | `Open4IDSDK-0.7.0.xcframework.zip` | `9b279110c65345ebbaddd7373c978551ce16caf041de7903b649f58a2f2658e2` |
+| 0.8.8   | `Open4IDSDK-0.8.8.xcframework.zip` | `b31e60c99a933558c564a1c9663bdd68b691c8406a7a42f6d895bdf675ceffb4` |
 
 ## What is inside
 
@@ -34,31 +35,42 @@ monorepo's `Scripts/build-xcframework.sh` at the tagged commit:
   payments surface — the headless `payments()`/`entitlements()` API plus the
   built-in StoreKit store (`storeKitPayments`, `Open4IDStoreKitPayments`,
   `onTransactionUpdate`))
-- `Headers/module.modulemap` — Clang module over the generated interface
-  (**0.7.0 and later**): add the slice's `Headers` directory to
-  `HEADER_SEARCH_PATHS` and `@import Open4IDSDK;` resolves without a
-  hand-written module map; Objective-C++ consumers keep `-fcxx-modules`
+- `Headers/module.modulemap` + `Modules/module.modulemap` — Clang module
+  over the generated interface (**0.8.8 and later**): `@import Open4IDSDK;`
+  resolves in an Objective-C host with no search-path setup or
+  `-fmodule-map-file` flag. The 0.3.3–0.7.0 binaries shipped no module map
+  (the ObjC examples keep their `Open4IDSDKModule` adapter for those).
+  Clean-room-verified: a SwiftPM consumer still resolves the Swift module
+  from the `.swiftinterface` set with the map present.
 - `Open4IDSDK.swiftmodule/` — module-stable `.swiftinterface` set
 
-## What is new in 0.7.0
+## What is new in 0.8.8
 
-- The **session persists by default** (Keychain): the same player — guest
-  included — and their purchases survive a relaunch and an
-  uninstall/reinstall. Opt out with `setSessionStore(nil)` /
-  `setSessionStoreMemoryOnly()` or pass your own (now-`@objc`)
-  `SessionStore`.
-- **Paid state rehydrates on its own**: once per process, after the first
-  bootstrap, the SDK refreshes the stored session's ledger rows and — when
-  a proof source is registered — submits the store's current receipts, so
-  renewals and pre-persistence purchases repair themselves at launch.
-- **Time-aware entitlement usability**: an `active` row past its
-  `expiresAt` is not usable between refreshes (`grace` stays
-  server-owned); parsed dates (`expiresAtDate`, `remainingSeconds`),
-  `has(_:at:)`, `hasAny`, `isPurchased(productId:)`.
-- **Objective-C persistence without a Swift shim**, `Open4IDDiagnostics`
-  opt-in redacted logging, store facts (`expirationDate`, `environment`)
-  on the purchase outcome, and the shipped Clang module above. Full list
-  in `CHANGELOG.md` §0.7.0.
+- **One event surface**: `client.onEvent` delivers every state change —
+  `auth`, `products`, `entitlements`, `purchase`, `restore`, and
+  `transaction` — in one block on the callback queue (main by default),
+  replacing host-side re-publishing plumbing. Additive: the typed
+  listeners still fire.
+- **`subscriptionState(productId:)`**: `.active`, `.grace` (billing
+  retry), `.expired`, `.none`, or `.unknown` for one catalog product —
+  reads the live catalog and the catalog captured in the persisted
+  snapshot, so it answers offline on a cold launch. Treat `.unknown` as
+  *checking*, never "locked".
+- **`start()`**: one-call launch (store adapter → bootstrap → launch
+  restore → guest sign-in only when nothing was restored). Single-flight,
+  retryable, and a stored session is never replaced by a guest.
+- **Guest login split from the guest button**: `guest_enabled` stays the
+  server capability; the new `guest_button_visible` flag only decides
+  whether built-in dialogs render "Continue as guest" (defaults to the
+  capability when absent — anonymous checkout is capability on, button
+  off).
+- **Purchase preflight**: the built-in store checks for a usable identity
+  before opening the StoreKit sheet, so a misconfigured "login required"
+  application fails with `client.auth.not_authenticated` instead of
+  charging a player whose verify would be rejected. Hosts gate their shop
+  with `canPurchase()` / `requiresSignIn()`.
+
+Full list in `CHANGELOG.md` §0.8.8.
 
 ## How to verify and install
 
@@ -66,12 +78,12 @@ Grab the zip from the [latest release](https://github.com/open4id-community/ios-
 
 ```bash
 shasum -a 256 -c SHA256SUMS          # optional integrity check
-unzip Open4IDSDK-0.7.0.xcframework.zip -d ~/open4id-ios-sdk
+unzip Open4IDSDK-0.8.8.xcframework.zip -d ~/open4id-ios-sdk
 ```
 
 Then in Xcode: **General → Frameworks, Libraries, and Embedded Content →
 Add… → Add Other → Add Files…** and pick
-`~/open4id-ios-sdk/Open4IDSDK-0.7.0.xcframework` with **Embed & Sign** (for a
+`~/open4id-ios-sdk/Open4IDSDK-0.8.8.xcframework` with **Embed & Sign** (for a
 macOS target, Xcode selects the macOS slice automatically).
 
 Please read `USER_GUIDE.md` for usage.

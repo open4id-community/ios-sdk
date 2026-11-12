@@ -27,20 +27,22 @@ issue at <https://github.com/open4id-community/ios-sdk/issues>.
 2. [Installation](#installation)
 3. [Project setup](#project-setup)
 4. [Configure the client](#configure-the-client)
-5. [Sign players in](#sign-players-in)
-6. [Login dialog (built-in UI)](#login-dialog-built-in-ui)
-7. [Social providers](#social-providers)
-8. [Session management](#session-management)
-9. [Player account flows](#player-account-flows)
-10. [Delegate verification to your server (server callback)](#delegate-verification-to-your-server-server-callback)
-11. [Payments the easy way (built-in store)](#payments-the-easy-way-built-in-store)
-12. [Payments and entitlements (headless)](#payments-and-entitlements-headless)
-13. [Payments in Objective-C](#payments-in-objective-c)
-14. [Error handling](#error-handling)
-15. [Token storage](#token-storage)
-16. [Security model](#security-model)
-17. [Objective-C and Unity notes](#objective-c-and-unity-notes)
-18. [Troubleshooting](#troubleshooting)
+5. [One-call startup](#one-call-startup)
+6. [Events and subscription state](#events-and-subscription-state)
+7. [Sign players in](#sign-players-in)
+8. [Login dialog (built-in UI)](#login-dialog-built-in-ui)
+9. [Social providers](#social-providers)
+10. [Session management](#session-management)
+11. [Player account flows](#player-account-flows)
+12. [Delegate verification to your server (server callback)](#delegate-verification-to-your-server-server-callback)
+13. [Payments the easy way (built-in store)](#payments-the-easy-way-built-in-store)
+14. [Payments and entitlements (headless)](#payments-and-entitlements-headless)
+15. [Payments in Objective-C](#payments-in-objective-c)
+16. [Error handling](#error-handling)
+17. [Token storage](#token-storage)
+18. [Security model](#security-model)
+19. [Objective-C and Unity notes](#objective-c-and-unity-notes)
+20. [Troubleshooting](#troubleshooting)
 
 ## Requirements
 
@@ -97,19 +99,22 @@ simulator slice (`ios-arm64_x86_64-simulator`), built with library evolution
 enabled so the binary remains ABI-stable across future Xcode
 toolchains.
 
-The slices deliberately ship **no Clang module**: a `module.modulemap`
-named `Open4IDSDK` inside the artifact shadows the Swift module for SPM
-consumers (the library-evolution header marks the Swift classes
-unavailable, so `import Open4IDSDK` stops compiling). Objective-C
-consumers therefore import the generated interface directly
-(`#import <Open4IDSDK/Open4IDSDK-Swift.h>` after adding the slice's
-`Headers` directory to `HEADER_SEARCH_PATHS`), or use the
-`Open4IDSDKModule` module-map adapter shipped with the public examples
-(`-fmodule-map-file=…`, giving `@import Open4IDSDK;` from pure ObjC). For
-an **Objective-C++** host, keep `-fcxx-modules` on the files that import
-it — the generated Swift header contains
-`@import AuthenticationServices;`, and clang rejects `@import` inside C++
-unless modules are enabled for C++ too.
+Each slice ships a Clang module map at `Headers/module.modulemap` (the
+location Xcode reads for a library XCFramework) and at
+`Modules/module.modulemap`. With the framework added to your target, a pure
+Objective-C or Objective-C++ file can therefore write `@import Open4IDSDK;`
+with no `FRAMEWORK_SEARCH_PATHS`, `HEADER_SEARCH_PATHS`,
+`-fmodule-map-file`, or header symlink. The direct header import
+(`#import <Open4IDSDK/Open4IDSDK-Swift.h>`) also works when you add the
+slice's `Headers` directory to the search path. For an **Objective-C++**
+host, keep `-fcxx-modules` on the files that import it — the generated Swift
+header contains `@import AuthenticationServices;`, and clang rejects
+`@import` inside C++ unless modules are enabled for C++ too.
+
+> Artifacts **before 0.8.8** ship no Clang module (0.7.0's zip predates
+> this change), so ObjC hosts on them must import the header directly or use
+> the `Open4IDSDKModule` adapter from the examples. Upgrade to 0.8.8 to
+> drop both workarounds.
 
 A Swift package resolved via SPM is not directly callable from Objective-C —
 choose SPM consumption for Swift apps and the XCFramework for
@@ -185,6 +190,177 @@ if let snapshot = auth.getConfig() {
 }
 ```
 
+## One-call startup
+
+`start()` runs the startup order the SDK expects, so hosts stop
+reimplementing it:
+
+1. creates the built-in StoreKit adapter unless you already registered
+   `payments().proofSource` yourself, so the launch restore can submit
+   store proofs;
+2. calls `bootstrap()` (auth discovery + payments catalog);
+3. waits for the launch restore that bootstrap scheduled, so paid state is
+   settled and a stored player keeps their session;
+4. signs in as a **guest** only when nothing was restored and the
+   application allows guest login.
+
+```swift
+auth.start { session, error in
+    if let error {
+        // Offline first launch: cached paid state is still readable
+        // (`auth.entitlements().current()`), and `start()` can be retried.
+        return
+    }
+    guard let session else { return }
+    switch auth.sessionState {
+    case .guest:         showGame(session)
+    case .authenticated: showGame(session)
+    case .expired:       showGame(session)   // rotation is automatic
+    case .none:          showSignIn()
+    }
+}
+```
+
+Or with async/await:
+
+```swift
+let session = try await auth.start()
+// start() returns a session: guest, authenticated, or expired (an expired
+// token is rotated on the next SDK call).
+startGame(session)
+```
+
+```objc
+[auth start:^(AuthSession * _Nullable session, NSError * _Nullable error) {
+    if (error) { return; }   // retry later; cached paid state survives
+    switch (auth.sessionState) {
+        case Open4IDSessionStateGuest:
+        case Open4IDSessionStateAuthenticated:
+        case Open4IDSessionStateExpired:   // a session exists; do not mint a guest
+            [self showGame:session];
+            break;
+        case Open4IDSessionStateNone:
+            [self showSignIn];
+            break;
+    }
+}];
+```
+
+`start()` is thread-safe and single-flight: concurrent calls share one
+sequence. A failed call can simply be called again — no cleanup is required —
+and a stored session is **never** replaced by a guest.
+
+Branch on `sessionState`, not `isAuthenticated()`:
+
+| `sessionState` | Meaning | What the host does |
+| --- | --- | --- |
+| `.none` | No session: nothing restored, no guest signed in | Show sign-in / onboarding |
+| `.guest` | Anonymous guest session | Start the game; offer `linkEmail` later |
+| `.authenticated` | Email/password, Google, GitHub, or Apple session | Start the game |
+| `.expired` | A session exists but its access token aged out | Start the game anyway — the SDK rotates the token on the next call. **Do not** sign in a new guest |
+
+`isAuthenticated()` answers "is the **access token** valid right now", which
+is why it is the wrong test for "is the player signed in". Use
+`hasStoredSession()` to know whether a previous process persisted a session
+for this app/environment (the Keychain default survives a reinstall).
+
+If you prefer to control the order yourself, `bootstrap()`,
+`continueAsGuest()`, and the built-in store still work as before; see
+[Sign players in](#sign-players-in) and
+[Payments the easy way](#payments-the-easy-way-built-in-store).
+
+## Events and subscription state
+
+Hosts used to forward SDK state into their own bus — a notification per
+listener, plus per-product-id checks over `isPurchased` for the settings
+screen. `onEvent` collapses that into one block, and
+`subscriptionState(productId:)` answers paid state directly.
+
+### One event block
+
+```swift
+auth.onEvent = { event in
+    switch event.kind {
+    case .auth:
+        // event.success (a session exists), event.message == "guest"/"google"/…
+        self.renderAccount(event.success)
+    case .products:
+        // catalog rows arrived (message "catalog:8") or StoreKit resolved them
+        // (message "store:8"). Rebuild the shop here instead of after bootstrap.
+        self.renderShop()
+    case .entitlements:
+        // event.entitlements is the new snapshot; success:false with an empty
+        // list means it was cleared (sign-out, reset, player switch).
+        self.refreshOwnedBadges(event.entitlements)
+    case .purchase:
+        // event.productId + event.message ("verified", a consumable state, or
+        // a stable error key). Grant from entitlements/current() as usual.
+        self.showPurchaseResult(event.success, event.productId)
+    case .restore:
+        // event.message == "verified=2 rejected=0 conflict=0"; event.entitlements
+        // is the recomputed snapshot. Hide the "Restore" spinner here.
+        self.finishRestore(event)
+    case .transaction:
+        // Ask-to-buy approval or a cross-device buy finished in the background.
+        self.grantDeliveredItems(event.entitlements)
+    @unknown default:
+        break
+    }
+}
+```
+
+```objc
+auth.onEvent = ^(Open4IDEvent *event) {
+    switch (event.kind) {
+        case Open4IDEventKindAuth:         [self renderAccount:event.success]; break;
+        case Open4IDEventKindProducts:     [self renderShop]; break;
+        case Open4IDEventKindEntitlements: [self refreshOwnedBadges:event.entitlements]; break;
+        case Open4IDEventKindPurchase:     break;
+        case Open4IDEventKindRestore:      break;
+        case Open4IDEventKindTransaction:  break;
+        default: break;
+    }
+};
+```
+
+Rules that matter:
+
+- **Additive.** `onAuthStateChanged`, `entitlements().onChanged`, and
+  `storeKitPayments().onTransactionUpdate` keep firing. Migrate one path at
+  a time; `onEvent` is sugar, not a replacement you must adopt at once.
+- **Delivered on the callback queue** (see
+  [Callback queue](#callback-queue)) — main by default, `nil` for
+  synchronous delivery. State is settled when the block runs, so reading
+  `entitlements().current()` inside it is safe.
+- **`message` is safe to log.** It is a stable error key
+  (`client.payment.rate_limited`) or a short summary, never a token or a
+  store proof. `productId`/`message` are `nil` and `entitlements` empty
+  when a kind does not carry them.
+- **Set it before `configure`** if you want the first bootstrap and sign-in
+  events; setting `nil` detaches it.
+
+### Subscription state
+
+```swift
+let state = auth.subscriptionState(productId: "com.example.premium")
+// or: auth.entitlements().subscriptionState(productId: …)
+```
+
+| State | Meaning | UI |
+| --- | --- | --- |
+| `.active` | A usable `active` row exists | Show as subscribed |
+| `.grace` | The store is retrying billing; the server still grants access | Show as subscribed, optionally "payment problem" |
+| `.expired` | The row is past its expiry, or its state is `expired` | Show renewal |
+| `.none` | Revoked-only, or no row while the snapshot is known | Show the buy button |
+| `.unknown` | No snapshot yet, product in neither catalog, or a consumable | Show **checking**, never "locked" |
+
+The accessor reads the live catalog first, then the catalog stored with the
+paid-state snapshot, so it answers on an offline cold launch. That is why it
+beats a `isPurchased(productId:)` boolean: a boolean cannot tell billing
+retry from expiry, and it cannot say "not loaded yet". Iterate
+`payments().products().products` and call it per row instead of hardcoding
+product ids.
+
 ## Sign players in
 
 ### Swift / async-await
@@ -255,10 +431,11 @@ do {
 ### Objective-C
 
 Every `async` Swift API ships a completion-handler twin callable from
-Objective-C. Import the SDK's generated ObjC interface header first — the
-direct-header import works in every consumption path (SPM package and
-XCFramework); `@import Open4IDSDK;` works only in some SPM setups (pure
-Objective-C targets with a source package), so prefer the header import.
+Objective-C. Import the SDK with `@import Open4IDSDK;` (0.8.8+ XCFramework,
+no build settings needed) or with the generated header
+(`#import <Open4IDSDK/Open4IDSDK-Swift.h>`), which works in every
+consumption path. `@import` in an SPM source-package target depends on the
+target being pure Objective-C.
 Errors surface as `NSError` with domain `Open4IDSDK`, code set
 to the integer error code, and the stable key in `userInfo[@"key"]`
 (`client.auth.*`, `system.*`, `sdk.*`):
@@ -323,7 +500,15 @@ void (^unsubscribe)(void) = [auth onAuthStateChanged:^(AuthSession * _Nullable s
 ## Login dialog (built-in UI)
 
 The SDK includes a ready-made login view so you do not have to build screens
-yourself yet. Two flavors ship in the package:
+yourself yet. Availability is split in two: `login.guest_enabled` is the
+server capability (guest identities may exist, and payments may bind to one),
+while `login.guest_button_visible` only decides whether the built-in views
+render "Continue as guest". The Core API defaults the button to the
+capability when the flag is absent, so older configurations behave exactly as
+before. Anonymous checkout is `guest_enabled = true` with
+`guest_button_visible = false`; login-required applications set both `false`.
+
+Two flavors ship in the package:
 
 - **`Open4IDAuthView`** — SwiftUI card view: email/password sign-in,
   registration, guest button, provider buttons, forgot-password, email
@@ -523,6 +708,39 @@ unsubscribe()   // unregistration returns a closure that cancels the listener
 The same listener shape exists in ObjC (see
 [Sign players in](#sign-players-in)).
 
+### Callback queue
+
+Every SDK listener — entitlement changes, purchase outcomes, auth-state
+changes, and server-callback errors — fires on the queue you choose with
+`setCallbackQueue(_:)`. The default is the **main queue**, so a UIKit or
+AppKit host updates views directly inside the callback:
+
+```swift
+auth.setCallbackQueue(.main)                    // default; explicit is fine
+auth.entitlements().onChanged { snapshot in
+    // main thread: safe to touch views
+    self.render(snapshot)
+}
+```
+
+```objc
+[auth setCallbackQueue:dispatch_get_main_queue()];   // default
+```
+
+Pass `nil` to deliver synchronously on the publishing thread — useful for
+headless servers and tests that assert immediately after a call:
+
+```swift
+auth.setCallbackQueue(nil)
+```
+
+Delivery is asynchronous on a non-`nil` queue, but **state is already
+settled** when your callback runs: `entitlements().current()`,
+`getSession()`, and `sessionState` reflect the new state, so a listener never
+races the SDK. A serial queue (the main queue included) delivers listener
+invocations in order, so do not block it with synchronous network or long
+file I/O.
+
 ### Refresh and validity
 
 - `isAuthenticated()` checks token freshness locally (with a 30 s expiry
@@ -634,6 +852,15 @@ if outcome.isVerified {
 // Restore works out of the box (the built-in proof source is registered).
 let result = try await store.restore()
 ```
+
+`purchase` preflights **before** opening the StoreKit sheet: with no session
+and guest login disabled it throws `client.auth.not_authenticated` instead of
+charging a player whose verify would be rejected. Gate your Buy buttons on
+`auth.canPurchase()` / `auth.requiresSignIn()`: both are fail-closed before
+the first bootstrap (`canPurchase()` is `false`), and `requiresSignIn()` is
+`true` only once bootstrap confirms guest login is off and there is no
+session. The guest identity itself is still minted after the player confirms
+the sheet, not at preflight time.
 
 Every method also has an `@objc` completion twin
 (`loadProducts(_:)`, `purchase(productId:completion:)`,
@@ -750,11 +977,11 @@ final class StoreProofs: PaymentProofSource {
 auth.payments().proofSource = StoreProofs()
 ```
 
-The source runs off your thread within a 10 s bound and the SDK submits at
-most 20 proofs; extras and `nil` entries are dropped. A source error, timeout,
-or throw never fails the restore: the ledger is still recomputed and
-`result.proofsUnavailable` is `true`, so show a retry instead of hiding a paid
-feature.
+The source runs off your thread within a 10 s bound; the SDK chunks every
+collected proof into requests of at most 20 proofs and 48 KiB, so nothing is
+dropped. A source error, timeout, or throw never fails the restore: the ledger
+is still recomputed and `result.proofsUnavailable` is `true`, so show a retry
+instead of hiding a paid feature.
 
 ```swift
 // Ledger recompute plus the proofs the registered source collected.
@@ -762,11 +989,11 @@ let result = try await auth.payments().restore()
 print(result.entitlements.count, result.verified, result.rejected,
       result.conflict, result.proofsUnavailable)
 
-// Optional explicit proofs (max 20 per call) — always win over the source.
-// An invalid proof counts as `rejected`; it does not fail the restore. A
-// proof that resolves to another anonymous player's binding transfers it to
-// the current player, while a proof owned by a credentialed account counts
-// as `conflict` (result.hasConflict) and changes nothing.
+// Optional explicit proofs (any count; the SDK chunks them) — always win over
+// the source. An invalid proof counts as `rejected`; it does not fail the
+// restore. A proof that resolves to another anonymous player's binding
+// transfers it to the current player, while a proof owned by a credentialed
+// account counts as `conflict` (result.hasConflict) and changes nothing.
 let repaired = try await auth.payments().restore(proofs: [proof])
 
 // Re-read the current rows at any time (ledger only, no store call).
@@ -799,7 +1026,8 @@ purchase and subscription, but not:
   gate features as "checking" rather than "locked" (see the offline
   cold-start pattern under *Entitlement states* below).
 
-Entitlement states are `active`, `grace`, `expired`, and `revoked`. Only`active` and `grace` are usable; expired and revoked rows stay in `list()`
+Entitlement states are `active`, `grace`, `expired`, and `revoked`. Only
+`active` and `grace` are usable; expired and revoked rows stay in `list()`
 so you can show history. Usability is time-aware: `has`/`isUsable` treat a
 cached `active` row whose `expiresAt` has passed as unusable even before
 the next refresh recomputes it (parse dates yourself with
@@ -808,26 +1036,32 @@ the next refresh recomputes it (parse dates yourself with
 original period end while the store's billing-retry window runs, and the
 grace-window end is the server's decision (it arrives as the next state on
 a later read). `expiresAt` is `nil` for non-expiring one-time
-grants. The device stores the session and never the grants: the snapshot is
-re-fetched from the ledger, not replayed from disk. On a cold start it is
-`nil` until the SDK's automatic launch restore (see above) or your first
-explicit `refresh()` / `restore()` fills it, and it is cleared whenever the
-signed-in player changes or signs out, so one player's grants never leak
-into another session. Treat a missing snapshot as **unknown**, not as "not
-purchased", and drive UI from `onChanged` rather than a one-time read.
+grants. The device stores the session and, since 0.8.0, the last known paid
+state (the entitlement rows plus the catalog they were resolved against):
+the rows are re-fetched from the ledger by the SDK, and the cached copy is
+replayed on a cold start so the game can render before the network answers.
+`configure` hydrates that cache, so `current()` is already readable offline
+right after configuration — flagged `isFromCache == true` with `savedAt` set
+to the fetch time. The first `refresh()`/`restore()`/verify replaces it with
+live rows, and it is cleared whenever the signed-in player changes or signs
+out, so one player's grants never leak into another session. Treat cached
+rows as **last known** paid state (they still go through the time-aware
+`isUsable` check) and a missing snapshot as **unknown**, never as "not
+purchased"; drive UI from `onChanged` rather than a one-time read.
 
 **Offline cold starts and the three-state check.** The launch restore is
-best-effort: offline it fails silently and the snapshot stays `nil` until
-connectivity returns (then the next `refresh()`/`restore()`/purchase
-publishes and `onChanged` fires). Gate features on all three states —
-`has(key)` when known-usable, "checking/try online" when the snapshot is
-`nil`, locked only when the snapshot exists and the row is absent,
-`expired`, or `revoked`. Two host-side patterns cover an offline start
-without ever painting "locked" for an unknown: keep your own
-last-known-usable-keys cache (keyed by `userId`, honoring `expiresAt` for
-subscriptions; OR it in only while the snapshot is `nil`), and/or fall back
-to StoreKit's `Transaction.currentEntitlements`, which StoreKit caches
-offline. Never derive "locked" from a `nil` snapshot.
+best-effort: offline it fails silently, but the hydrated cache keeps
+`current()` readable, so the shop is not blank. When no cache exists yet
+(a first launch, or a player who never had a successful read), the snapshot
+is `nil`. Gate features on all three states — `has(key)` when known-usable,
+"checking/try online" when the snapshot is `nil`, locked only when the
+snapshot exists and the row is absent, `expired`, or `revoked`. Two
+host-side patterns cover an uncached offline start without ever painting
+"locked" for an unknown: keep your own last-known-usable-keys cache (keyed
+by `userId`, honoring `expiresAt` for subscriptions; OR it in only while the
+snapshot is `nil`), and/or fall back to StoreKit's
+`Transaction.currentEntitlements`, which StoreKit caches offline. Never
+derive "locked" from a `nil` snapshot.
 
 Payment calls keep their own token fresh: `verifyTransaction`,
 `restore`, and `entitlements().refresh()` rotate a stale access token
@@ -925,14 +1159,11 @@ Open4IDEntitlements *entitlements = auth.entitlements;
 
 Import notes:
 
-- The direct-header import (`Open4IDSDK-Swift.h`) is the form that works in
-  every consumption path: the XCFramework ships it in every slice
-  (`Headers/Open4IDSDK-Swift.h`), and an SPM build exposes it on the header
-  search path. `@import Open4IDSDK;` compiles only in some SPM setups (a
-  pure-Objective-C target consuming a source package); a mixed ObjC/Swift
-  target fails to find the module, so prefer the header import.
-- The XCFramework ships static libraries plus the generated header — there
-  is no Clang module, so `@import` cannot resolve against it.
+- `@import Open4IDSDK;` works with the 0.8.8+ XCFramework: every slice ships
+  a Clang module map, so no search paths or flags are needed. The
+  direct-header form (`#import <Open4IDSDK/Open4IDSDK-Swift.h>`) also works
+  when the slice's `Headers` directory is on the header search path, and is
+  the form to use with an SPM **source** package or a pre-0.8.8 artifact.
 - `PaymentProvider` (the `google_play` / `app_store` string constants) is a
   Swift-only namespace; from ObjC pass the plain strings `@"app_store"` /
   `@"google_play"`.
@@ -982,7 +1213,8 @@ TransactionProof *proof = [TransactionProof
 `conflict`, `proofsUnavailable`, `hasConflict`), as do the entitlement row
 fields (`key`, `state`, `source`, `productId`, `type`, `grantedAt`,
 `expiresAt`, `isUsable`). Explicit-proofs restore uses
-`restoreWithProofs:completion:` (max 20 proofs per call).
+`restoreWithProofs:completion:`; the SDK chunks any number of proofs into
+requests of at most 20 and 48 KiB, so a host never splits them.
 
 ### Restore and entitlement reads
 
@@ -1028,8 +1260,8 @@ Two ways out, both Apple-supported:
 Threading: the completion twins may fire on a background executor, so hop to
 the main queue (`dispatch_async(dispatch_get_main_queue(), …)`) before
 touching UIKit/AppKit in a completion body. `collectProofs:` may call its
-completion on any thread — the SDK bounds the wait at 10 s and submits at
-most 20 proofs.
+completion on any thread — the SDK bounds the wait at 10 s and chunks the
+proofs it gets (20 per request, 48 KiB of serialized JSON).
 
 ## Error handling
 
@@ -1040,6 +1272,7 @@ can change between minor versions:
 | Swift type | Code | Meaning |
 |------------|------|---------|
 | `SdkValidationError` | `100003` | Client validation failure; `fieldErrors` maps unsafe fields (e.g. `appId`, `redirectUri`). |
+| `SdkPayloadTooLargeError` | `100005` | `client.payment.request_too_large`: the payment request body exceeded the Core API read limit, or the proof list could not be delivered. Covers both the new `413`/`100005` response and the legacy `400`/`100003` + `field_errors.body = too_large` shape. Restore chunks itself, so this normally never surfaces; if it does, do not retry the same body (`isRetryable == false`). |
 | `SdkAuthError` | `110003` | Invalid key/credentials (`110005`), email verification required (`120001`), token failures. |
 | `SdkNotFoundError` | `130004` | Unknown payment transaction or entitlement. |
 | `SdkConflictError` | `140006` | Purchase bound to another credentialed account (`client.payment.owned_by_another_account`); restore reports it as `conflict` instead. |
@@ -1048,6 +1281,28 @@ can change between minor versions:
 | `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. A `503` on **every** verify is not transient — it means the deployment's App Store configuration is incomplete: check the Portal's Payments → App Store section for the `(app, environment)` the client asserts (`bundle_id` empty or `notification_environment` invalid; a disabled provider or unknown product answers `400 invalid` instead). If the Portal looks right, contact the node operator — it is a server-side deployment issue, not a client or device problem. |
 | `SdkInternalError` | `170001` | Unexpected internal failure. |
 | `SdkNotImplementedError` | `-1` | Method awaiting its implementation phase (rare; only ahead of a shipped feature). |
+
+`SdkError.isRetryable` answers "can the same call succeed if I repeat it?"
+without matching codes: `true` for `150001` (rate limit), `160001` (service
+or transport down), and `160003` (store unavailable); `false` for shape
+errors (`100001`–`100003`), `100005` (oversize body), auth, conflict,
+not-found, and internal errors. The value is also in the bridged
+`NSError.userInfo["retryable"]`. Gate automatic retry loops on it.
+
+### Restore outcome matrix
+
+Restore never fails because of one bad purchase. For each submitted proof:
+
+| Server verdict | `RestoreResult` | What the host does |
+| --- | --- | --- |
+| Store-verified, ledger recorded (or already identical) | `verified` | Nothing; paid state is published through `entitlements.onChanged` |
+| Invalid, unknown, or unusable proof (wrong product, malformed JWS, refunded) | `rejected` | Nothing; log through diagnostics if support needs it. The SDK bisects the chunk to isolate it, and the rest still restores |
+| Valid proof owned by another **credentialed** account | `conflict` | Ask the player to sign in as that account; nothing was granted |
+| Valid proof owned by an **anonymous** guest | `verified` | Nothing; the binding moves to the current player |
+| Store unreachable, timeout, or the source threw | `proofsUnavailable == true` | Offer a retry; the ledger rows are still valid |
+
+A total failure (bad token, rate limit, outage) throws instead of returning a
+result; a re-run is safe because restore is idempotent.
 
 Stable error keys mirror the sibling SDKs, e.g. `client.auth.not_authenticated`,
 `client.auth.invalid_request`, `client.auth.provider_unavailable`,
@@ -1058,8 +1313,6 @@ Stable error keys mirror the sibling SDKs, e.g. `client.auth.not_authenticated`,
 As `NSError`, the domain is `Open4IDSDK`, the code is the integer error code,
 and `userInfo` carries `key`, `error_code` (and, when applicable,
 `field_errors`, `retry_after_sec`).
-
-## Token storage
 
 ## Opt-in diagnostics
 
@@ -1102,6 +1355,61 @@ key is always truncated to its last four characters.
 Pass the store at `configure`; switch the backend at runtime with
 `setSessionStore(_:)` (`nil` restores in-memory only).
 
+### Paid state cache (entitlements + catalog)
+
+The SDK also caches the player's **last known paid state** — the entitlement
+rows plus the catalog they were resolved against — and rehydrates it inside
+`configure`, before any network call:
+
+```swift
+try auth.configure(/* … */)
+
+// Right away, even offline and before the first refresh:
+if let snapshot = auth.entitlements().current() {
+    print("cached:", snapshot.isFromCache, snapshot.savedAt as Any)
+    let premium = auth.entitlements().has("premium")
+}
+if auth.entitlements().isPurchased(productId: "com.example.premium") {
+    unlockPremium()
+}
+```
+
+- **`isFromCache == true`** means the rows came from the store, not a
+  response in this process; `savedAt`/`savedAtMillis` is when they were
+  fetched. The next `refresh()`, `restore()`, or verify replaces them with
+  live state (`isFromCache == false`) and re-persists.
+- Missing paid state is **unknown**, not "not purchased". Cached rows still
+  go through the same time-aware expiry (`grace` stays usable; an `active`
+  row past its `expiresAt` locks offline).
+- The cache is per player and bound to `appId`/`bundleId`: a foreign or
+  corrupt item reads as "nothing cached". Sign-out, `reset()`, and a player
+  switch clear the departing player's cache only.
+- The default backend is `KeychainSnapshotStore` (same trust boundary as
+  the session store, survives reinstalls). When the session store is
+  `MemorySessionStore`, paid state is memory-only too. Opt out explicitly
+  with `setSnapshotStore(nil)`, or pass your own `@objc SnapshotStore`
+  adapter (for example a `KeychainSnapshotStore` with distinct
+  `service`/`account` values to namespace several applications in one
+  process).
+
+```swift
+auth.setSnapshotStore(KeychainSnapshotStore(service: "com.game.open4id",
+                                            account: "app_9f3ab2c1"))
+// or, from Swift:
+auth.setSnapshotStore(MemorySnapshotStore())   // or setSnapshotStore(nil)
+```
+
+```objc
+[auth setSnapshotStore:[[KeychainSnapshotStore alloc]
+                        initWithService:@"com.game.open4id"
+                                account:@"app_9f3ab2c1"]];
+// Paid-state memory-only opt-out:
+[auth setSnapshotStoreMemoryOnly];
+```
+
+Never cached: tokens, store proofs (JWS), or anything the server owns as an
+authoritative grant.
+
 ## Security model
 
 - **No secrets in the SDK.** `sdk_sk_...`, OAuth client secrets, Apple
@@ -1120,15 +1428,17 @@ Pass the store at `configure`; switch the backend at runtime with
 - The XCFramework's generated header (`Open4IDSDK-Swift.h`) exposes all
   public model types — `AuthSession`, `UserInfo`, `Bootstrap`,
   `AuthDiscovery`, `ProviderRef`, `LoginReadiness`, `ServerCallback`,
-  `ServerCallbackReceipt`, `SessionSnapshot`, and the payments set
-  (`PaymentCatalog`, `PaymentProduct`, `TransactionProof`, `Entitlement`,
-  `EntitlementSnapshot`, `RestoreResult`, `ConsumableReceipt`) — with
-  properties readable from Objective-C.
-- Import the generated header directly
-  (`#import <Open4IDSDK/Open4IDSDK-Swift.h>`); it is the one form that works
-  for both the SPM package and the XCFramework. The XCFramework ships no
-  Clang module, and `@import Open4IDSDK;` resolves only in some SPM setups
-  (pure Objective-C targets with a source package).
+  `ServerCallbackReceipt`, `SessionSnapshot`, `Open4IDSessionState`, and the
+  payments set (`PaymentCatalog`, `PaymentProduct`, `TransactionProof`,
+  `Entitlement`, `EntitlementSnapshot`, `PaymentSnapshot`,
+  `RestoreResult`, `ConsumableReceipt`) — with
+  properties readable from Objective-C. `SessionStore`/`SnapshotStore` and
+  the Keychain/memory adapters are `@objc` too, so a pure ObjC host
+  implements persistence without a Swift shim.
+- Import with `@import Open4IDSDK;` (0.8.8+ XCFramework ships a Clang module
+  map in every slice) or with the generated header directly
+  (`#import <Open4IDSDK/Open4IDSDK-Swift.h>`); the header form covers the
+  SPM source package and pre-0.8.8 artifacts.
 - `RedactedConfig` (the return of `getConfig()`) is a nested Swift type and
   is not exposed to Objective-C; simply check `getConfig() != nil` to
   confirm configuration success.

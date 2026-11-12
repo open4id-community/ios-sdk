@@ -1,15 +1,17 @@
 // Clang module map bridging the Open4IDSDK static-library XCFramework for
 // Objective-C hosts (`@import Open4IDSDK;`, as documented in USER_GUIDE.md).
 //
-// The XCFramework ships `Open4IDSDK-Swift.h` + `libOpen4IDSDK.a` + the
-// Swift module per slice, but no `Modules/module.modulemap`, so Clang has
-// nothing to satisfy the import from. The map must physically sit next to
-// the header it names (Clang resolves module-map header paths relative to
-// the map's own directory — no include-path fallback), hence this folder:
+// Since SDK 0.8.8 the XCFramework itself ships `Headers/module.modulemap`
+// per slice, so most hosts no longer need this adapter; it is kept because
+// the sample pins the flag explicitly and keeps working on older artifacts
+// (0.3.3–0.7.0), which shipped no module map. The map must physically sit
+// next to the header it names (Clang resolves module-map header paths
+// relative to the map's own directory — no include-path fallback), hence
+// this folder:
 //
 //   Open4IDSDKModule/
 //     module.modulemap        <- this map
-//     Open4IDSDK-Swift.h      -> ../../ Open4IDSDK-0.7.0.xcframework slice
+//     Open4IDSDK-Swift.h      -> ../../ Open4IDSDK-0.8.8.xcframework slice
 //
 // The symlink targets the simulator slice; the device slice's header is
 // byte-identical (diff-verified), so the map is correct for ios and

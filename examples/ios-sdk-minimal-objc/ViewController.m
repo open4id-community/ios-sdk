@@ -14,8 +14,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// `examples/macos-sdk-minimal-objc` uses — and this sample only renders
 /// host-owned Buy buttons from the `Open4IDStoreProduct` rows it returns.
 
-/// The SDK's `@objc` completion twins may fire on a background executor, so
-/// every completion body hops to the main queue before touching UIKit.
+/// SDK listeners and `@objc` completion handlers are delivered on the
+/// client's callback queue — the main queue by default since 0.8.0
+/// (`setCallbackQueue:`). `OnMain` stays as a cheap defensive hop for hosts
+/// that changed the queue; this sample keeps the default.
 static void OnMain(void (^block)(void)) {
     if ([NSThread isMainThread]) {
         block();
@@ -56,6 +58,19 @@ static NSString *PaidStateDescription(EntitlementSnapshot * _Nullable snapshot) 
     return [NSString stringWithFormat:@"%lu row(s): %@",
             (unsigned long)snapshot.entitlements.count,
             [list componentsJoinedByString:@", "]];
+}
+
+/// One-line name for `sessionState`, so the log distinguishes "no session"
+/// from "a session exists but its access token aged out" (which the SDK
+/// rotates; it must never mint a new guest).
+static NSString *SessionStateDescription(Open4IDSessionState state) {
+    switch (state) {
+        case Open4IDSessionStateNone: return @"none";
+        case Open4IDSessionStateGuest: return @"guest";
+        case Open4IDSessionStateAuthenticated: return @"authenticated";
+        case Open4IDSessionStateExpired: return @"expired";
+    }
+    return @"unknown";
 }
 
 @interface ViewController ()
@@ -172,6 +187,23 @@ static NSString *const kDefaultGoogleIosClientId =
         }
     }];
 
+    // One event stream (0.8.8). `onEvent` is additive sugar over the typed
+    // listeners in this file: auth, products, entitlements, purchase,
+    // restore, and StoreKit transaction changes arrive in one block on the
+    // callback queue (main by default), so a host that re-publishes SDK
+    // state into its own event bus can delete that plumbing. `message` is a
+    // stable key or a short summary and is always safe to log.
+    __weak typeof(self) weakSelf = self;
+    client.onEvent = ^(Open4IDEvent *event) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        [strongSelf appendLog:[NSString stringWithFormat:@"event %@", event]];
+        if (event.kind == Open4IDEventKindEntitlements) {
+            strongSelf.paidLabel.text = [NSString stringWithFormat:@"Paid state: %@",
+                PaidStateDescription(strongSelf.entitlements.current)];
+        }
+    };
+
     // Auto configure + bootstrap on launch (same behavior as the Swift
     // sibling sample) so a device/simulator launch proves the live path.
     [self performAutoLaunch];
@@ -241,6 +273,7 @@ static NSString *const kDefaultGoogleIosClientId =
     // MARK: Bootstrap section
     [self.stackView addArrangedSubview:[self sectionLabel:@"Bootstrap"]];
     [self.stackView addArrangedSubview:[self buttonWithTitle:@"Load bootstrap" action:@selector(tapLoadBootstrap) height:buttonHeight style:UIButtonTypeSystem]];
+    [self.stackView addArrangedSubview:[self buttonWithTitle:@"Start (one call)" action:@selector(tapStart) height:buttonHeight style:UIButtonTypeSystem]];
 
     // MARK: Social section
     [self.stackView addArrangedSubview:[self sectionLabel:@"Social"]];
@@ -616,6 +649,35 @@ static NSString *const kDefaultGoogleIosClientId =
 }
 
 #pragma mark - Actions
+
+/// One-call startup (SDK 0.8.0): store adapter → bootstrap → the launch
+/// restore bootstrap scheduled → guest sign-in only when nothing was
+/// restored. `sessionState` is the honest branch (an expired token still
+/// means "signed in"), and `hasStoredSession` says whether a previous run
+/// persisted a session (the Keychain default survives a reinstall).
+- (void)tapStart {
+    [self runAction:^(NSError * _Nullable error) {
+        if (error) return;
+        Open4IDAuthClient *client = self.authClient;
+        [client start:^(AuthSession * _Nullable session, NSError * _Nullable error) {
+            OnMain(^{
+                if (error) {
+                    [self appendLog:[NSString stringWithFormat:@"start failed: %@",
+                        error.userInfo[@"key"] ?: error.localizedDescription]];
+                    return;
+                }
+                // start() also bootstraps, so the login dialog's provider
+                // list comes from the snapshot it loaded.
+                self.lastBootstrap = [client getBootstrap];
+                [self appendLog:[NSString stringWithFormat:
+                    @"start ok: state=%@ sub=%@ stored=%@",
+                    SessionStateDescription(client.sessionState),
+                    session.userId ?: @"-",
+                    [client hasStoredSession] ? @"true" : @"false"]];
+            });
+        }];
+    }];
+}
 
 - (void)tapLoadBootstrap {
     [self runAction:^(NSError * _Nullable error) {

@@ -103,6 +103,7 @@ struct ContentView: View {
 
                 Section("Bootstrap") {
                     Button("Load bootstrap") { run(loadBootstrap) }
+                    Button("Start (one call)") { run(startClient) }
                 }
 
                 Section("Social") {
@@ -198,6 +199,17 @@ struct ContentView: View {
                 }
             }
             paidText = Self.paidDescription(appClient.entitlements().current())
+            // One event stream (0.8.8): auth, products, entitlements,
+            // purchase, restore, and StoreKit transaction changes arrive in
+            // one block on the callback queue (main by default), so a host
+            // does not need four listeners plus its own event bus. Additive:
+            // the typed listeners here still fire.
+            appClient.onEvent = { event in
+                append("event \(event)")
+                if event.kind == .entitlements {
+                    paidText = Self.paidDescription(appClient.entitlements().current())
+                }
+            }
             // The GitHub/Apple web sessions present from the first scene window.
             appClient.setPresentationAnchor {
                 UIApplication.shared.connectedScenes
@@ -371,6 +383,32 @@ struct ContentView: View {
         let bootstrap = try await appClient.bootstrap()
         append("bootstrap ok: app=\(bootstrap.displayName ?? bootstrap.appId) "
             + "google=\(bootstrap.login.google.enabled)")
+    }
+
+    /// One-call startup (SDK 0.8.0): store adapter → bootstrap → the launch
+    /// restore bootstrap scheduled → guest sign-in only when nothing was
+    /// restored. `sessionState` is the honest branch (`.expired` is still a
+    /// session), and `hasStoredSession()` reports a previous run.
+    private func startClient() async throws {
+        let session = try await appClient.start()
+        showSession(session)
+        append("start ok: state=\(Self.sessionStateName(appClient.sessionState)) "
+            + "stored=\(appClient.hasStoredSession())")
+        // start() bootstraps internally, so bind the login UI to that
+        // snapshot instead of fetching it twice.
+        if let bootstrap = appClient.getBootstrap() {
+            authModel.setBootstrap(bootstrap)
+        }
+    }
+
+    private static func sessionStateName(_ state: Open4IDSessionState) -> String {
+        switch state {
+        case .none: return "none"
+        case .guest: return "guest"
+        case .authenticated: return "authenticated"
+        case .expired: return "expired"
+        @unknown default: return "unknown"
+        }
     }
 
     private func signInGoogle() async throws {

@@ -8,6 +8,161 @@ GitHub SPM mirror
 `sdks/ios/dist/` with `SHA256SUMS` for Objective-C / binary consumers.
 The monorepo tags every release `ios-v<version>` (lineage marker).
 
+## 0.8.8 (2026-11-12)
+
+- **One event surface for hosts.** `Open4IDAuthClient.onEvent` delivers one
+  `Open4IDEvent` for every state change a host used to re-publish itself:
+  `auth` (sign-in/sign-out/refresh/restore/account deletion, with the
+  sign-in method in `message`), `products` (bootstrap catalog and
+  `loadProducts`), `entitlements` (publish, hydration, and the cleared
+  signed-out snapshot), `purchase` (`verifyTransaction`/
+  `verifyConsumable`, including a non-grantable consumable state),
+  `restore` (`restore()`/`restore(proofs:)` with a verified/rejected/
+  conflict summary), and `transaction` (ask-to-buy approvals and
+  cross-device buys from `Transaction.updates`). `success`, `productId`,
+  `message`, and `entitlements` carry the per-kind detail; `message` is a
+  stable error key or a short summary and never a token or a store proof.
+  The block is additive — every typed listener still fires — and is
+  delivered on the callback queue (`setCallbackQueue(_:)`, main by
+  default), not synchronously inside the operation. Setting `nil`
+  detaches it.
+- **`subscriptionState(productId:)`** (ObjC
+  `subscriptionStateForProductId:`), on `entitlements()` and as a client
+  convenience, replaces host-side recomputation from
+  `isPurchased(productId:)`. It returns `.active`, `.grace` (billing
+  retry), `.expired` (including a cached `active` row past `expiresAt`),
+  `.none` (revoked-only, or no row while the snapshot is known), or
+  `.unknown` (no snapshot yet, a product in neither catalog, or a
+  consumable without entitlement keys). It reads the live catalog, then the
+  catalog captured in the persisted snapshot, so it answers offline on a
+  cold launch. Treat `.unknown` as *checking*, never as "locked".
+- **Guest login split from the guest button.** `guest_enabled` stays the
+  server capability (guest identities, guest-bound payments); the new
+  `guest_button_visible` flag only decides whether the built-in dialogs
+  render "Continue as guest". It defaults to `guest_enabled` when the Core
+  API omits it, so older bootstraps and configurations behave exactly as
+  before. Anonymous checkout is `guest_enabled = true` +
+  `guest_button_visible = false`: purchases work without a login screen
+  while the dialog shows only real sign-in methods. Exposed as
+  `LoginReadiness.guestButtonVisible` (ObjC `guestButtonVisible`) and
+  `Open4IDAuthLayout.Model.guestButtonVisible`.
+- **Purchase preflight.** `Open4IDStoreKitPayments.purchase` now checks for
+  a usable identity before opening the StoreKit sheet: with no session and
+  guest login disabled it throws `client.auth.not_authenticated` instead of
+  charging a player whose verify would be rejected. Hosts get
+  `canPurchase()` and `requiresSignIn()` for shop gating (fail-closed
+  before the first bootstrap). The guest identity is still minted only
+  after the player confirms the sheet.
+- Tests: `EventsTests` (15) — all six event kinds, the subscription-state
+  matrix (including the hydrated-cache and offline cases), main-queue
+  delivery, and detaching. Full suite: 253 tests, 1 skipped, 0 failures.
+- **Publisher binaries**: `Open4IDSDK-0.8.8.xcframework.zip` in
+  `sdks/ios/dist/` (device, simulator, and macOS slices; library-evolution
+  swiftinterfaces and the per-slice Clang module map). SHA-256 in
+  `SHA256SUMS`; the artifact is the one vendored into bedtimefairytales.
+
+## 0.8.0 (unreleased)
+
+- **Paid state survives a relaunch.** The SDK now persists the last
+  entitlement rows **and the catalog they were resolved against**, and
+  rehydrates them inside `configure` before any network call. A cold or
+  offline launch answers `entitlements().has(_:)`,
+  `hasAny(_:)`, and `isPurchased(productId:)` immediately, instead of
+  showing an empty shop until the first `refresh()`/`restore()`/verify.
+  The hydrated snapshot is flagged `isFromCache == true` with
+  `savedAtMillis`/`savedAt` set to when those rows were fetched, so a host
+  can render "last known" state without pretending it is authoritative.
+- **The cache is scoped and cleared.** Each player gets their own item
+  (`KeychainSnapshotStore` account `"<account>.<playerId>"`), and the
+  snapshot carries `appId`/`bundleId`/`playerId`: a foreign or corrupt item
+  reads as "nothing cached". Sign-out, `reset()`, and a player switch clear
+  the departing player's cache only; another player's cache is untouched.
+  Cached rows keep the server's `state`/`expiresAt` and still go through the
+  same time-aware `isUsable` check, so a lapsed subscription stays locked
+  offline.
+- **`SnapshotStore` is an `@objc` protocol.** The default backend is
+  `KeychainSnapshotStore` (same trust boundary as `KeychainSessionStore`,
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`), so paid state also
+  survives a reinstall. `MemorySnapshotStore` is used automatically when the
+  session store is memory-only (hermetic hosts and tests never write grants
+  to the Keychain). Opt out explicitly with `setSnapshotStore(nil)`
+  (`setSnapshotStoreMemoryOnly` from Objective-C); pass an adapter to
+  `setSnapshotStore:` to namespace several applications in one process.
+- **`start()` runs the documented startup order in one call.** It creates
+  the built-in StoreKit adapter *before* bootstrap (unless the host already
+  registered a `payments().proofSource`), bootstraps, waits for the launch
+  restore that bootstrap scheduled, and only then signs in as a guest when
+  nothing was restored. It is single-flight and safe to call again
+  (concurrent callers share one sequence), and a failed start (offline first
+  launch) leaves the cached paid state readable and can simply be retried.
+  **A stored session is never replaced by a guest.**
+- **`sessionState` and `hasStoredSession()`.** `sessionState` answers
+  `none`/`guest`/`authenticated`/`expired` for branching, replacing the
+  `isAuthenticated()` footgun (that one is about the **access token** only).
+  `.expired` still means a session exists: `getSession() != nil` and every
+  payment call rotates the token — do not mint a new guest on it.
+  `hasStoredSession()` reports whether a previous process persisted a
+  session for this app/environment, so a host can skip a first-launch
+  onboarding screen.
+- **Listeners fire on a host-chosen queue.** Every SDK callback —
+  entitlement changes, purchase outcomes, auth-state changes, and
+  server-callback errors — is delivered on `setCallbackQueue(_:)`, which
+  defaults to the **main queue**. Hosts stop wrapping each listener in
+  `dispatch_async(dispatch_get_main_queue(), …)`. Pass `nil` to deliver
+  synchronously on the publishing thread (headless servers, tests). State
+  is already settled when the callback runs, so `current()` is safe to read
+  inside a listener.
+
+## 0.7.1 (unreleased)
+
+- **Restore chunks itself.** `payments().restore()`,
+  `restore(proofs:)`, `storeKitPayments().restore()`, and the launch
+  restore now split the collected proofs into requests that respect both
+  server bounds: at most **20 proofs** and at most **48 KiB of serialized
+  JSON** per request. A catalog with more owned products than one request
+  can carry now restores completely instead of failing wholesale with
+  `field_errors.body = too_large`. Hosts no longer need their own
+  batching loop, and the `proofs` list is never truncated: every proof is
+  submitted.
+- **Shape errors are bisected, transients are not.** A chunk rejected for
+  its shape (`100001`–`100003`) is split until the offending proof is
+  isolated; a single proof that still fails is counted in
+  `RestoreResult.rejected` and logged, while the rest of the restore
+  continues. A rate limit (`150001`), an outage (`160001`/`160003`), an
+  auth failure, or a transport error aborts immediately — retrying
+  smaller cannot help and would multiply requests.
+- **Proofs over the public field cap are rejected without a request.** A
+  proof whose `jws_representation`/`purchase_token` exceeds the Core API's
+  16384-byte limit is counted as `rejected` and reported in diagnostics
+  instead of spending a round trip.
+- **One published snapshot per restore.** The server returns the full
+  entitlement list on every call, so the SDK publishes the last successful
+  chunk once. `RestoreResult` sums `verified`/`rejected`/`conflict`
+  across chunks.
+- **A distinct oversize-body error.** `SdkPayloadTooLargeError`
+  (`100005`, key `client.payment.request_too_large`) covers both the new
+  Core API `413` response and the legacy `400`/`100003` shape with
+  `field_errors.body = too_large`, so host branching works against either
+  server release. The SDK chunks restores, so this normally never
+  surfaces.
+- **`SdkError.isRetryable`.** `true` for `150001`, `160001`, and `160003`;
+  `false` for shape, auth, conflict, not-found, internal, and oversize
+  errors. Also exposed as `retryable` in the bridged `NSError.userInfo`,
+  so hosts stop matching codes by hand.
+- **The XCFramework ships a Clang module map.** Each slice carries
+  `Headers/module.modulemap` (the path Xcode reads for a library
+  XCFramework) and `Modules/module.modulemap`, so an Objective-C host adds
+  only the framework and writes `@import Open4IDSDK;` — no
+  `FRAMEWORK_SEARCH_PATHS`, `HEADER_SEARCH_PATHS`, `-fmodule-map-file`, or
+  header symlink. The `Open4IDSDKModule` adapter in the examples is no
+  longer required for new integrations.
+- **Core API (deployed after this release).** The client payment routes
+  raise their body cap from 65536 to **262144 bytes** and answer an
+  oversized body with `413` / `client.payment.request_too_large` /
+  `100005` (`field_errors.body = too_large` is preserved). 0.7.1 maps
+  both shapes, so deploying the server after the SDK keeps host branching
+  stable.
+
 ## 0.7.0 (2026-11-12)
 
 - **ObjC session persistence (no Swift shim).** `SessionStore` is now an
@@ -40,10 +195,6 @@ The monorepo tags every release `ios-v<version>` (lineage marker).
   SDK key, entitlement rows on every publish, restore counts, verify
   results, launch-hydration failures as error keys). Off by default; the
   JWS, tokens, and the full key are never logged.
-- **XCFramework ships a Clang module.** Each slice now carries
-  `Headers/module.modulemap` over the generated interface, so
-  `@import Open4IDSDK;` works without a hand-written module map
-  (Objective-C++ hosts still need `-fcxx-modules`; see the guide).
 - **Store timing and environment docs.** The guide adds the
   sandbox/TestFlight renewal-rate table, the SDK-environment vs
   store-environment mapping, App Store Server Notifications guidance, and

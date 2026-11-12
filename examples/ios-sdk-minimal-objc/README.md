@@ -31,9 +31,9 @@ SwiftUI. Uses `UIKit` and the SDK's `@objc` completion-handler surface.
 | `AppDelegate.h/.m` | App delegate; holds the shared `Open4IDAuthClient` (Google-sign-in subclass) and wires the presentation anchor |
 | `ViewController.h/.m` | Main UI: config fields, action buttons, session label, log console |
 | `Open4IDSocialClient.h/.m` | `Open4IDAuthClient` subclass overriding the Google code-acquisition seam |
-| `Open4IDSDKModule/module.modulemap` | Clang module map bridging the XCFramework's Swift-generated header so pure-ObjC consumers can `@import Open4IDSDK;` (the static-library XCFramework ships no `Modules/module.modulemap`); `Open4IDSDK-Swift.h` inside it is a symlink to the SDK slice's header (byte-identical across device/simulator slices) |
+| `Open4IDSDKModule/module.modulemap` | Clang module map bridging the XCFramework's Swift-generated header so pure-ObjC consumers can `@import Open4IDSDK;`. Redundant on the 0.8.8 artifact (it ships `Headers/module.modulemap` per slice) but kept working for 0.3.3–0.7.0 artifacts, which shipped none; `Open4IDSDK-Swift.h` inside it is a symlink to the SDK slice's header (byte-identical across device/simulator slices) |
 | `Info.plist` | App bundle config, custom URL scheme for callbacks |
-| `ios-sdk-minimal-objc.xcodeproj/` | Xcode project (links `Open4IDSDK-0.7.0.xcframework` + SPM `GoogleSignIn-iOS`) |
+| `ios-sdk-minimal-objc.xcodeproj/` | Xcode project (links `Open4IDSDK-0.8.8.xcframework` + SPM `GoogleSignIn-iOS`) |
 ## Building
 
 1. Open `examples/ios-sdk-minimal-objc/ios-sdk-minimal-objc.xcodeproj` in Xcode.
@@ -41,7 +41,7 @@ SwiftUI. Uses `UIKit` and the SDK's `@objc` completion-handler surface.
 3. Build and run.
 
 The SDK is linked as the prebuilt **XCFramework** at the repo root
-(`../../Open4IDSDK-0.7.0.xcframework`); the project's `-fmodule-map-file`
+(`../../Open4IDSDK-0.8.8.xcframework`); the project's `-fmodule-map-file`
 build setting points Clang at `Open4IDSDKModule/module.modulemap` so
 `@import Open4IDSDK;` resolves. The `GoogleSignIn-iOS` package is fetched
 remotely via SPM for the Google sign-in override. The shared scheme pins the
