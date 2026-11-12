@@ -17,7 +17,7 @@ through SwiftPM instead:
 | 0.4.0   | `Open4IDSDK-0.4.0.xcframework.zip` | `8a09740a9fe5b8c0707615d39b330b4bc42c2f1b5462b8046724f5896f0f2091` |
 | 0.5.0   | `Open4IDSDK-0.5.0.xcframework.zip` | `94e51e641657dcc61ad230d893c4d8deeffcf785862f04087f75e552b6d3930f` |
 | 0.6.0   | `Open4IDSDK-0.6.0.xcframework.zip` | `4cc5fa555d1f412b37a653b4e7a1fcf603eeb91f67e2eaec330d703b5223910c` |
-| 0.7.0   | `Open4IDSDK-0.7.0.xcframework.zip` | `4068af22a9b96ecfdc2ea37084b70692481bc502ae3b0497f4567a7c28f988df` |
+| 0.7.0   | `Open4IDSDK-0.7.0.xcframework.zip` | `9b279110c65345ebbaddd7373c978551ce16caf041de7903b649f58a2f2658e2` |
 
 ## What is inside
 
