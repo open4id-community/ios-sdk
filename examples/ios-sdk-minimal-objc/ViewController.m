@@ -614,9 +614,15 @@ static NSString *const kDefaultGoogleIosClientId =
 
 /// Debug hook for automated verification (mirrors the Swift sibling
 /// sample): when launched with `OPEN4ID_AUTOTEST=<value>`, auto-run one
-/// web flow (`facebook`|`github`|`apple`) or the `payments` rehearsal five
-/// seconds after bootstrap so the typed outcome lands in the log console
-/// without tapping anything.
+/// web flow (`facebook`|`github`|`apple`), the `payments` rehearsal, the
+/// `restore` path, or the `restore-after-delete` scenario five seconds after
+/// bootstrap so the typed outcome lands in the log console without tapping
+/// anything. `restore` calls the same interactive restore as the button,
+/// including the App Store account sync; if no sandbox account is signed in
+/// the store sheet still needs the human. `restore-after-delete` deletes the
+/// current player first, so the store proof has to move the purchase to a
+/// fresh guest — the reinstall-recovery case. Only the interactive calls
+/// sync; the automatic launch restore stays passive.
 - (void)runAutotestIfRequested {
     NSString *autotest = [NSProcessInfo.processInfo.environment objectForKey:kEnvAutotest];
     if (!autotest.length) return;
@@ -628,6 +634,16 @@ static NSString *const kDefaultGoogleIosClientId =
             [self tapSignInGitHub];
         } else if ([autotest isEqualToString:@"apple"]) {
             [self tapSignInApple];
+        } else if ([autotest isEqualToString:@"restore"]) {
+            [self appendLog:@"autotest: interactive restore (store sync)"];
+            [self tapRestorePurchases];
+        } else if ([autotest isEqualToString:@"restore-after-delete"]) {
+            [self appendLog:@"autotest: delete account, then interactive restore"];
+            [self tapDeleteAccount];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                [self tapRestorePurchases];
+            });
         } else if ([autotest isEqualToString:@"payments"]) {
             // Payment rehearsal through the SDK's built-in store: shop load,
             // then purchase of the first resolvable row (the StoreKit sheet
@@ -1019,25 +1035,41 @@ static NSString *const kDefaultGoogleIosClientId =
     }];
 }
 
-/// SDK restore through the proof source the built-in store registered
-/// (`Transaction.currentEntitlements`).
+/// SDK restore through the built-in store, initiated by the player.
+///
+/// This is deliberately **not** the passive `payments.restore()` the SDK's
+/// automatic launch restore runs. `restoreInteractive:` asks the App Store
+/// account first (`AppStore.sync()`, inside the SDK), so a device with no
+/// signed-in store account — or a fresh install whose local receipt does not
+/// yet carry the purchase — presents the store sign-in sheet instead of
+/// silently restoring nothing. A dismissed sheet is a typed error
+/// (`client.payment.store_sign_in_cancelled`), never "verified=0".
 - (void)tapRestorePurchases {
     [self runAction:^(NSError * _Nullable error) {
         if (error) return;
         __weak typeof(self) weakSelf = self;
-        [self.payments restore:^(RestoreResult * _Nullable result,
+        [self.paymentsStore
+            restoreInteractive:^(RestoreResult * _Nullable result,
                                  NSError * _Nullable err) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             OnMain(^{
             if (err) {
-                [strongSelf appendLog:[NSString stringWithFormat:
-                    @"failed: %@", DescribeError(err)]];
+                NSString *key = err.userInfo[@"key"] ?: err.localizedDescription;
+                if ([key isEqualToString:@"client.payment.store_sign_in_cancelled"]) {
+                    [strongSelf appendLog:@"store: sign-in cancelled — nothing submitted"];
+                } else if ([key isEqualToString:@"client.payment.store_unavailable"]) {
+                    [strongSelf appendLog:@"store: sign-in failed — store unreachable, retry"];
+                } else {
+                    [strongSelf appendLog:[NSString stringWithFormat:
+                        @"failed: %@", DescribeError(err)]];
+                }
                 return;
             }
             [strongSelf appendLog:[NSString stringWithFormat:
-                @"restore ok: verified=%ld rejected=%ld conflict=%ld noProofs=%d",
+                @"restore ok: verified=%ld rejected=%ld conflict=%ld noProofs=%d "
+                @"storeSynced=%d",
                 (long)result.verified, (long)result.rejected, (long)result.conflict,
-                result.proofsUnavailable]];
+                result.proofsUnavailable, result.storeSynced]];
             });
         }];
     }];

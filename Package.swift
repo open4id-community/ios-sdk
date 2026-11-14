@@ -13,8 +13,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "Open4IDSDK",
-            url: "https://github.com/open4id-community/ios-sdk/releases/download/v0.8.8/Open4IDSDK-0.8.8.xcframework.zip",
-            checksum: "b31e60c99a933558c564a1c9663bdd68b691c8406a7a42f6d895bdf675ceffb4"
+            url: "https://github.com/open4id-community/ios-sdk/releases/download/v1.0.0/Open4IDSDK-1.0.0.xcframework.zip",
+            checksum: "d020c129866ab6d977a4e1e819b2bbe30ab96d9048dfc04e6d3f94c2a71083f8"
         )
     ]
 )

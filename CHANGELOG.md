@@ -8,6 +8,62 @@ GitHub SPM mirror
 `sdks/ios/dist/` with `SHA256SUMS` for Objective-C / binary consumers.
 The monorepo tags every release `ios-v<version>` (lineage marker).
 
+## 1.0.0 (2026-11-15)
+
+- **App-open analytics**: `appOpen()` (ObjC `appOpen:`) sends the
+  fire-and-forget cold-start ping to `client/app_open` with a locally minted
+  installation id (`deviceIdentifier()`), persisted in the Keychain
+  (`com.open4id.sdk.device`) so it survives relaunches and reinstalls; every
+  Keychain failure falls back to an in-memory id. The ping never throws and
+  never blocks startup; the server stores only a salted hash of the id.
+  `Open4IDAuthClient.resetDeviceId()` is the debug/support reset hook.
+  Every payment call now rides the same id beside the session
+  (`device_id`/`device_platform` body fields) — attribution metadata the
+  server hashes and never lets alter the money path.
+
+- **Interactive restore for "Restore purchases".** New
+  `Open4IDStoreKitPayments.restoreInteractive()` (ObjC
+  `restoreInteractive:`) does what the passive `restore()` cannot: it asks
+  the App Store account first (`AppStore.sync()`, which raises the store
+  sign-in sheet on a device with no signed-in account or a receipt that does
+  not yet carry the purchase) and only then runs the same ledger restore.
+  Previously a reinstall with no store account signed in read an empty local
+  cache and reported `verified=0` with no prompt, so a paid purchase looked
+  lost. `restore()` and the automatic launch restore stay passive on
+  purpose: a cold start must never present a store sign-in sheet.
+- **New `SdkStoreSignInCancelledError`** (`140007`,
+  `client.payment.store_sign_in_cancelled`). The player dismissed the store
+  sheet, so **no** ledger request was made and nothing was restored. It is
+  not retryable and must not be reported as "no purchases found". Any other
+  sync failure maps to `SdkStoreUnavailableError` (`160003`, retryable).
+- **Bearer-proved player calls rotate a stale token.** `deleteAccount()`,
+  `linkEmail(email:password:)`, and `getUser()` now refresh an access token
+  that has passed its 900 s lifetime before the request, through the same
+  `ensureSession(minValidityMs:)` path the payment calls use. Previously they
+  sent the stored token verbatim, so ~15 min after sign-in the server answered
+  `401` and, for deletion, the call failed while still clearing the local
+  session. Signed out they still throw `client.auth.not_authenticated`; none
+  of them mints a guest.
+- **`RestoreResult.storeSynced`** (additive, default `false`) is `true` only
+  on the interactive path after the account sync completed. A completed sync
+  with `verified == 0` is the honest "this store account owns none of our
+  products" answer, distinct from the passive path's "nothing cached".
+- **Sample and docs**: the pure-ObjC `ios-sdk-minimal-objc` Restore button
+  now calls `restoreInteractive:` and logs cancellation, store failure, and
+  `storeSynced` separately; the README documents the interactive/passive
+  split and the consumable/expired-subscription limits.
+- Tests: `PaymentsRestoreInteractiveTests` (8) — sync-once and before proof
+  collection, passive paths never sync, cancellation and store failure both
+  skip the ledger, the `storeSynced` matrix, the honest empty result, and a
+  purchase owned by another credentialed account reported as `conflict`.
+  Full suite: 271 tests, 1 skipped, 0 failures.
+- Device-verified on an iPhone 12 against the App Store sandbox (all six
+  restore cases): sheet on a signed-out account, typed cancellation on
+  dismissal with no ledger request, recovery of a purchase after the guest
+  account was deleted, and a passive launch restore that never prompts.
+- No Core API change: the ledger already re-grants a store-verified proof
+  while the owner is a movable guest, so the client only needed to send one.
+
 ## 0.8.8 (2026-11-12)
 
 - **One event surface for hosts.** `Open4IDAuthClient.onEvent` delivers one

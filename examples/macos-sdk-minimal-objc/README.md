@@ -4,7 +4,7 @@ Objective-C twin of `examples/macos-sdk-minimal/`: a minimal **AppKit** app
 that verifies Open4ID **App Store IAP** end to end through the Open4ID SDK's
 **Objective-C surface** — the same `@objc` completion-handler API the Swift
 sibling reaches through `async`/`await`. It links the SDK as the prebuilt
-**XCFramework** at the repo root (`../../Open4IDSDK-0.8.8.xcframework`,
+**XCFramework** at the repo root (`../../Open4IDSDK-1.0.0.xcframework`,
 unzip the release asset there) with a Clang module-map adapter
 (`Open4IDSDKModule/`) so `@import Open4IDSDK;` resolves against the static
 library. Scoped to **payments only** — there is no login, social, session,
@@ -57,14 +57,14 @@ former `StoreKitBridge.swift` is gone.
 | `ViewController.h/.m` | Main UI in pure ObjC: config fields, action buttons, log console, all SDK calls |
 | `Info.plist` | App bundle config |
 | `Open4IDSDKModule/` | Clang module map bridging the XCFramework's Swift-generated header so pure-ObjC consumers can `@import Open4IDSDK;`; the `Open4IDSDK-Swift.h` symlink targets the **macOS** slice's header |
-| `macos-sdk-minimal-objc.xcodeproj/` | Xcode project (links `Open4IDSDK-0.8.8.xcframework` + `-fmodule-map-file` build setting) |
+| `macos-sdk-minimal-objc.xcodeproj/` | Xcode project (links `Open4IDSDK-1.0.0.xcframework` + `-fmodule-map-file` build setting) |
 
 ## Requirements
 
 - macOS 13+ with Xcode 15+.
 - Unzip the release asset at the repo root:
-  `unzip Open4IDSDK-0.8.8.xcframework.zip -d .` — the example links
-  `../../Open4IDSDK-0.8.8.xcframework`.
+  `unzip Open4IDSDK-1.0.0.xcframework.zip -d .` — the example links
+  `../../Open4IDSDK-1.0.0.xcframework`.
 
 ## Build & run
 

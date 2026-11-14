@@ -33,7 +33,7 @@ SwiftUI. Uses `UIKit` and the SDK's `@objc` completion-handler surface.
 | `Open4IDSocialClient.h/.m` | `Open4IDAuthClient` subclass overriding the Google code-acquisition seam |
 | `Open4IDSDKModule/module.modulemap` | Clang module map bridging the XCFramework's Swift-generated header so pure-ObjC consumers can `@import Open4IDSDK;`. Redundant on the 0.8.8 artifact (it ships `Headers/module.modulemap` per slice) but kept working for 0.3.3–0.7.0 artifacts, which shipped none; `Open4IDSDK-Swift.h` inside it is a symlink to the SDK slice's header (byte-identical across device/simulator slices) |
 | `Info.plist` | App bundle config, custom URL scheme for callbacks |
-| `ios-sdk-minimal-objc.xcodeproj/` | Xcode project (links `Open4IDSDK-0.8.8.xcframework` + SPM `GoogleSignIn-iOS`) |
+| `ios-sdk-minimal-objc.xcodeproj/` | Xcode project (links `Open4IDSDK-1.0.0.xcframework` + SPM `GoogleSignIn-iOS`) |
 ## Building
 
 1. Open `examples/ios-sdk-minimal-objc/ios-sdk-minimal-objc.xcodeproj` in Xcode.
@@ -41,7 +41,7 @@ SwiftUI. Uses `UIKit` and the SDK's `@objc` completion-handler surface.
 3. Build and run.
 
 The SDK is linked as the prebuilt **XCFramework** at the repo root
-(`../../Open4IDSDK-0.8.8.xcframework`); the project's `-fmodule-map-file`
+(`../../Open4IDSDK-1.0.0.xcframework`); the project's `-fmodule-map-file`
 build setting points Clang at `Open4IDSDKModule/module.modulemap` so
 `@import Open4IDSDK;` resolves. The `GoogleSignIn-iOS` package is fetched
 remotely via SPM for the Google sign-in override. The shared scheme pins the
@@ -136,8 +136,9 @@ Swift-only API and the SDK owns that side (same pattern as
 `examples/macos-sdk-minimal-objc`). `client.storeKitPayments` enables the
 whole pipeline in one call: shop rows from the Open4ID catalog request
 (`[payments products]`), the StoreKit 2 purchase flow (sheet → JWS proof →
-verify → `Transaction.finish`), the restore proof source, and the
-`Transaction.updates` listener. The sample only renders host-owned Buy
+verify → `Transaction.finish`), the restore proof source (passive for the
+automatic launch restore, `restoreInteractive:` for the Restore button), and
+the `Transaction.updates` listener. The sample only renders host-owned Buy
 buttons from the rows `loadProducts:` returns.
 
 ```objc
@@ -155,8 +156,14 @@ store.onTransactionUpdate = ^(Open4IDPurchaseOutcome *outcome) {
 [store purchase:row.product
      completion:^(Open4IDPurchaseOutcome *outcome, NSError *error) { ... }];
 
-// Restore + ledger through the stable payments/entitlements namespaces.
-[payments restore:^(RestoreResult *result, NSError *error) { ... }];
+// Restore through the built-in store: asks the App Store account first
+// (`AppStore.sync()`, may show the store sign-in sheet), then repairs the
+// ledger. `payments.restore` is the passive variant the SDK's launch
+// restore uses (cache read only, never prompts).
+[store restoreInteractive:^(RestoreResult *result, NSError *error) {
+    // error.userInfo[@"key"] == @"client.payment.store_sign_in_cancelled"
+    // when the player dismissed the sheet: nothing was submitted.
+}];
 [entitlements refresh:^(EntitlementSnapshot *snapshot, NSError *error) { ... }];
 ```
 
@@ -166,7 +173,11 @@ through the scheme's StoreKit test configuration
 (`examples/Open4IDStoreConfig.storekit`) on the simulator and through the
 App Store sandbox on a real device. `OPEN4ID_AUTOTEST=payments` auto-runs
 the rehearsal (shop load + purchase of the first resolvable row; the
-StoreKit sheet still needs the human's confirm).
+StoreKit sheet still needs the human's confirm), `OPEN4ID_AUTOTEST=restore`
+auto-runs the interactive restore (the same call as the Restore button,
+including the App Store account sync), and
+`OPEN4ID_AUTOTEST=restore-after-delete` deletes the current player first so
+the store proof has to move the purchase to a fresh guest.
 
 ## Notes
 

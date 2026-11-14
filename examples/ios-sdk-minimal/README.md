@@ -8,7 +8,7 @@ action order, and an append-only log console.
 
 - Xcode 15+ (verified with Xcode 27.1), iOS 16+ simulator or device.
 - The app links the SDK as the prebuilt **XCFramework**
-  (`../../Open4IDSDK-0.8.8.xcframework`, repo root) — no registry dependency.
+  (`../../Open4IDSDK-1.0.0.xcframework`, repo root) — no registry dependency.
   GoogleSignIn is resolved via SPM from the sample project.
 
 ## Build & run
@@ -36,6 +36,7 @@ those fields (no UI editing needed) — point them at your own deployment:
 SIMCTL_CHILD_OPEN4ID_ENDPOINT=https://your-node.example.com/api
 SIMCTL_CHILD_OPEN4ID_PORTAL_ORIGIN=https://your-portal.example.com
 SIMCTL_CHILD_OPEN4ID_AUTOTEST=facebook   # auto-run one web flow after bootstrap
+SIMCTL_CHILD_OPEN4ID_AUTOTEST=restore    # auto-run the interactive App Store restore
 ```
 
 A successful launch logs:
@@ -68,7 +69,9 @@ sheet → JWS proof → verify → `Transaction.finish` — the restore proof so
 and the `Transaction.updates` listener for ask-to-buy approvals and
 cross-device buys). The sample provides the shop UI only: **Tap Load shop (SDK
 store)** and the sample renders one Buy button per `Open4IDStoreProduct` row
-(disabled when the row is not resolvable), plus **Restore purchases** and
+(disabled when the row is not resolvable), plus **Restore purchases** (the
+interactive `storeKitPayments().restoreInteractive()`, which asks the App
+Store account first and may show the store sign-in sheet) and
 **Entitlements (ledger)** through the same SDK namespaces as the macOS
 samples. Products resolve through the scheme's StoreKit test configuration
 (`examples/Open4IDStoreConfig.storekit`) on the simulator and through the
