@@ -1278,7 +1278,7 @@ can change between minor versions:
 | `SdkConflictError` | `140006` | Purchase bound to another credentialed account (`client.payment.owned_by_another_account`); restore reports it as `conflict` instead. |
 | `SdkRateLimitedError` | `150001` | Rate limit; carries `retryAfterSec` (-1 when the server did not specify). |
 | `SdkUnavailableError` | `160001` | Core API or transport unavailable (timeout, HTTP 5xx, connectivity). |
-| `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. A `503` on **every** verify is not transient — it means the deployment's App Store configuration is incomplete: check the Portal's Payments → App Store section for the `(app, environment)` the client asserts (`bundle_id` empty or `notification_environment` invalid; a disabled provider or unknown product answers `400 invalid` instead). If the Portal looks right, contact the node operator — it is a server-side deployment issue, not a client or device problem. |
+| `SdkStoreUnavailableError` | `160003` | Store verification temporarily unavailable; retryable. A `503` on **every** verify is not transient — it means the deployment's App Store configuration is incomplete: check the Portal's Payments → App Store section for the `(app, environment)` the client asserts (`bundle_id` empty; a disabled provider or unknown product answers `400 invalid` instead). If the Portal looks right, contact the node operator — it is a server-side deployment issue, not a client or device problem. |
 | `SdkInternalError` | `170001` | Unexpected internal failure. |
 | `SdkNotImplementedError` | `-1` | Method awaiting its implementation phase (rare; only ahead of a shipped feature). |
 

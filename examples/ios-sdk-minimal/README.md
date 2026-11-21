@@ -7,9 +7,8 @@ action order, and an append-only log console.
 ## Requirements
 
 - Xcode 15+ (verified with Xcode 27.1), iOS 16+ simulator or device.
-- The app links the SDK as the prebuilt **XCFramework**
-  (`../../Open4IDSDK-0.8.8.xcframework`, repo root) — no registry dependency.
-  GoogleSignIn is resolved via SPM from the sample project.
+- The app references the SDK as a **local Swift package**
+  (`../../sdks/ios`) — no registry dependency.
 
 ## Build & run
 
@@ -29,13 +28,14 @@ The app **auto-configures and bootstraps on launch** with the development
 application's fixtures (the sample's bundle ID `com.open4id.example.ios` is
 registered on it, native binding `platform: "ios"`), defaulting to the
 production endpoint `https://id.open4id.com/api` and production Portal
-origin `https://app.open4id.com`. Launch-time environment overrides pre-fill
-those fields (no UI editing needed) — point them at your own deployment:
+origin `https://app.open4id.com`. For local-stack runs, launch-time
+environment overrides pre-fill those fields (no UI editing needed):
 
 ```sh
-SIMCTL_CHILD_OPEN4ID_ENDPOINT=https://your-node.example.com/api
-SIMCTL_CHILD_OPEN4ID_PORTAL_ORIGIN=https://your-portal.example.com
+SIMCTL_CHILD_OPEN4ID_ENDPOINT=http://localhost:10001/api
+SIMCTL_CHILD_OPEN4ID_PORTAL_ORIGIN=http://localhost:4200
 SIMCTL_CHILD_OPEN4ID_AUTOTEST=facebook   # auto-run one web flow after bootstrap
+SIMCTL_CHILD_OPEN4ID_AUTOTEST=restore    # auto-run the interactive App Store restore
 ```
 
 A successful launch logs:
@@ -68,7 +68,9 @@ sheet → JWS proof → verify → `Transaction.finish` — the restore proof so
 and the `Transaction.updates` listener for ask-to-buy approvals and
 cross-device buys). The sample provides the shop UI only: **Tap Load shop (SDK
 store)** and the sample renders one Buy button per `Open4IDStoreProduct` row
-(disabled when the row is not resolvable), plus **Restore purchases** and
+(disabled when the row is not resolvable), plus **Restore purchases** (the
+interactive `storeKitPayments().restoreInteractive()`, which asks the App
+Store account first and may show the store sign-in sheet) and
 **Entitlements (ledger)** through the same SDK namespaces as the macOS
 samples. Products resolve through the scheme's StoreKit test configuration
 (`examples/Open4IDStoreConfig.storekit`) on the simulator and through the
@@ -158,11 +160,11 @@ its Play-Services flow.
 ## Configuration
 
 The Configuration section mirrors the Android sample's fields, plus a
+**Portal origin** field (passed to the SDK's `setPortalOrigin` — the origin
+hosting the per-app `/facebook-callback/<bundle id>` and sibling bridges,
+production default unless pointed at a local Portal) and a
 **Google iOS client ID** field for the GoogleSignIn override (defaults to
 the wired GCP iOS client). For a
 **real device**, change the redirect URI + Bundle ID to your own
 registered app (the Portal must have the iOS platform registered with that
 bundle ID, and the custom scheme must match the redirect scheme exactly).
-The **Portal origin** field is passed to the SDK's `setPortalOrigin` — the
-origin hosting the per-app `/facebook-callback/<bundle id>` and sibling
-bridges, production default unless pointed at a local Portal.

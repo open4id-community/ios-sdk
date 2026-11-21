@@ -1,81 +1,80 @@
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
-	objectVersion = 56;
 	classes = {
 	};
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		BB00000000000000000000B1 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A1 /* main.m */; };
-		BB00000000000000000000B2 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A2 /* AppDelegate.m */; };
-		BB00000000000000000000B3 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A4 /* ViewController.m */; };
-		BB00000000000000000000B4 /* Open4IDSocialClient.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A6 /* Open4IDSocialClient.m */; };
-		BB00000000000000000000B7 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000A9 /* SceneDelegate.m */; };
-		BB00000000000000000000B5 /* Open4IDSDK-0.8.8.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = BB00000000000000000000AB /* Open4IDSDK-0.8.8.xcframework */; };
-		BB00000000000000000000B6 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = BB000000000000000000000E /* GoogleSignIn */; };
+		B10000000000000000000B01 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000A01 /* main.m */; };
+		B10000000000000000000B02 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000A02 /* AppDelegate.m */; };
+		B10000000000000000000B03 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000A04 /* ViewController.m */; };
+		B10000000000000000000B04 /* Open4IDSocialClient.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000A06 /* Open4IDSocialClient.m */; };
+		B10000000000000000000B05 /* Open4IDSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000D01 /* Open4IDSDK */; };
+		B10000000000000000000B06 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000D04 /* GoogleSignIn */; };
+		B10000000000000000000B07 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000A09 /* SceneDelegate.m */; };
+		B10000000000000000000B08 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000A11 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		BB00000000000000000000A1 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
-		BB00000000000000000000A2 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
-		BB00000000000000000000A3 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
-		BB00000000000000000000A4 /* ViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewController.m; sourceTree = "<group>"; };
-		BB00000000000000000000A5 /* ViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewController.h; sourceTree = "<group>"; };
-		BB00000000000000000000A6 /* Open4IDSocialClient.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Open4IDSocialClient.m; sourceTree = "<group>"; };
-		BB00000000000000000000A7 /* Open4IDSocialClient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Open4IDSocialClient.h; sourceTree = "<group>"; };
-		BB00000000000000000000A8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		BB00000000000000000000A9 /* SceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
-		BB00000000000000000000AA /* SceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
-		BB00000000000000000000AB /* Open4IDSDK-0.8.8.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ../../Open4IDSDK-0.8.8.xcframework; sourceTree = "<group>"; };
-		BB00000000000000000000AD /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = text; name = module.modulemap; path = Open4IDSDKModule/module.modulemap; sourceTree = "<group>"; };
-		BB00000000000000000000C1 /* ios-sdk-minimal-objc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ios-sdk-minimal-objc.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000A01 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		B10000000000000000000A02 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		B10000000000000000000A03 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		B10000000000000000000A04 /* ViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewController.m; sourceTree = "<group>"; };
+		B10000000000000000000A05 /* ViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewController.h; sourceTree = "<group>"; };
+		B10000000000000000000A06 /* Open4IDSocialClient.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Open4IDSocialClient.m; sourceTree = "<group>"; };
+		B10000000000000000000A07 /* Open4IDSocialClient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Open4IDSocialClient.h; sourceTree = "<group>"; };
+		B10000000000000000000A08 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10000000000000000000A09 /* SceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
+		B10000000000000000000A10 /* SceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
+		B10000000000000000000A11 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B10000000000000000000C01 /* ios-sdk-minimal-objc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ios-sdk-minimal-objc.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		BB000000000000000000000A /* Frameworks */ = {
+		B10000000000000000000E01 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BB00000000000000000000B5 /* Open4IDSDK-0.8.8.xcframework in Frameworks */,
-				BB00000000000000000000B6 /* GoogleSignIn in Frameworks */,
+				B10000000000000000000B05 /* Open4IDSDK in Frameworks */,
+				B10000000000000000000B06 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		BB00000000000000000000F1 = {
+		B10000000000000000000F01 = {
 			isa = PBXGroup;
 			children = (
-				BB00000000000000000000F2 /* ios-sdk-minimal-objc */,
-				BB00000000000000000000AB /* Open4IDSDK-0.8.8.xcframework */,
-				BB00000000000000000000F3 /* Products */,
+				B10000000000000000000F02 /* ios-sdk-minimal-objc */,
+				B10000000000000000000F03 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		BB00000000000000000000F2 /* ios-sdk-minimal-objc */ = {
+		B10000000000000000000F02 /* ios-sdk-minimal-objc */ = {
 			isa = PBXGroup;
 			children = (
-				BB00000000000000000000A1 /* main.m */,
-				BB00000000000000000000A2 /* AppDelegate.m */,
-				BB00000000000000000000A3 /* AppDelegate.h */,
-				BB00000000000000000000A4 /* ViewController.m */,
-				BB00000000000000000000A5 /* ViewController.h */,
-				BB00000000000000000000A6 /* Open4IDSocialClient.m */,
-				BB00000000000000000000A7 /* Open4IDSocialClient.h */,
-				BB00000000000000000000A8 /* Info.plist */,
-				BB00000000000000000000A9 /* SceneDelegate.m */,
-				BB00000000000000000000AA /* SceneDelegate.h */,
-				BB00000000000000000000AD /* module.modulemap */,
+				B10000000000000000000A01 /* main.m */,
+				B10000000000000000000A02 /* AppDelegate.m */,
+				B10000000000000000000A03 /* AppDelegate.h */,
+				B10000000000000000000A04 /* ViewController.m */,
+				B10000000000000000000A05 /* ViewController.h */,
+				B10000000000000000000A06 /* Open4IDSocialClient.m */,
+				B10000000000000000000A07 /* Open4IDSocialClient.h */,
+				B10000000000000000000A08 /* Info.plist */,
+				B10000000000000000000A09 /* SceneDelegate.m */,
+				B10000000000000000000A10 /* SceneDelegate.h */,
+				B10000000000000000000A11 /* Assets.xcassets */,
 			);
-			name = ios-sdk-minimal-objc;
+			name = "ios-sdk-minimal-objc";
 			sourceTree = "<group>";
 		};
-		BB00000000000000000000F3 /* Products */ = {
+		B10000000000000000000F03 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				BB00000000000000000000C1 /* ios-sdk-minimal-objc.app */,
+				B10000000000000000000C01 /* ios-sdk-minimal-objc.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -83,7 +82,7 @@
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
-		BB000000000000000000000D /* Headers */ = {
+		B10000000000000000000I01 /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -93,43 +92,44 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
-		BB0000000000000000000001 /* ios-sdk-minimal-objc */ = {
+		B10000000000000000000G01 /* ios-sdk-minimal-objc */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = BB0000000000000000000007 /* Build configuration list for PBXNativeTarget "ios-sdk-minimal-objc" */;
+			buildConfigurationList = B10000000000000000000H01 /* Build configuration list for PBXNativeTarget "ios-sdk-minimal-objc" */;
 			buildPhases = (
-				BB000000000000000000000D /* Headers */,
-				BB0000000000000000000009 /* Sources */,
-				BB000000000000000000000A /* Frameworks */,
-				BB000000000000000000000B /* Resources */,
+				B10000000000000000000I01 /* Headers */,
+				B10000000000000000000I02 /* Sources */,
+				B10000000000000000000E01 /* Frameworks */,
+				B10000000000000000000I03 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = ios-sdk-minimal-objc;
+			name = "ios-sdk-minimal-objc";
 			packageProductDependencies = (
-				BB000000000000000000000E /* GoogleSignIn */,
+				B10000000000000000000D01 /* Open4IDSDK */,
+				B10000000000000000000D04 /* GoogleSignIn */,
 			);
-			productName = ios-sdk-minimal-objc;
-			productReference = BB00000000000000000000C1 /* ios-sdk-minimal-objc.app */;
+			productName = "ios-sdk-minimal-objc";
+			productReference = B10000000000000000000C01 /* ios-sdk-minimal-objc.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		BB0000000000000000000002 /* Project object */ = {
+		B10000000000000000000J01 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
-					BB0000000000000000000001 = {
+					B10000000000000000000G01 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
-			buildConfigurationList = BB0000000000000000000008 /* Build configuration list for PBXProject "ios-sdk-minimal-objc" */;
+			buildConfigurationList = B10000000000000000000H04 /* Build configuration list for PBXProject "ios-sdk-minimal-objc" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -137,56 +137,59 @@
 				en,
 				Base,
 			);
-			mainGroup = BB00000000000000000000F1;
+			mainGroup = B10000000000000000000F01;
 			packageReferences = (
-				BB000000000000000000000C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				B10000000000000000000D02 /* XCLocalSwiftPackageReference "../../sdks/ios" */,
+				B10000000000000000000D03 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
-			productRefGroup = BB00000000000000000000F3 /* Products */;
+			productRefGroup = B10000000000000000000F03 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				BB0000000000000000000001 /* ios-sdk-minimal-objc */,
+				B10000000000000000000G01 /* ios-sdk-minimal-objc */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		BB000000000000000000000B /* Resources */ = {
+		B10000000000000000000I03 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B10000000000000000000B08 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		BB0000000000000000000009 /* Sources */ = {
+		B10000000000000000000I02 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BB00000000000000000000B1 /* main.m in Sources */,
-				BB00000000000000000000B2 /* AppDelegate.m in Sources */,
-				BB00000000000000000000B3 /* ViewController.m in Sources */,
-				BB00000000000000000000B4 /* Open4IDSocialClient.m in Sources */,
-				BB00000000000000000000B7 /* SceneDelegate.m in Sources */,
+				B10000000000000000000B01 /* main.m in Sources */,
+				B10000000000000000000B02 /* AppDelegate.m in Sources */,
+				B10000000000000000000B03 /* ViewController.m in Sources */,
+				B10000000000000000000B04 /* Open4IDSocialClient.m in Sources */,
+				B10000000000000000000B07 /* SceneDelegate.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		BB0000000000000000000003 /* Debug */ = {
+		B10000000000000000000H02 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = LZACU2X449;
-				CODE_SIGNING_ALLOWED = YES;
+				DEVELOPMENT_TEAM = S64RW26J76;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -195,57 +198,50 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
+				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.open4id.example.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				OTHER_CFLAGS = (
-					"$(inherited)",
-					"-fmodule-map-file=$(PROJECT_DIR)/Open4IDSDKModule/module.modulemap",
-				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-ObjC",
-				);
-				TARGETED_DEVICE_FAMILY = "1";
-				INFOPLIST_FILE = Info.plist;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
-		BB0000000000000000000004 /* Release */ = {
+		B10000000000000000000H03 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = LZACU2X449;
-				CODE_SIGNING_ALLOWED = YES;
+				DEVELOPMENT_TEAM = S64RW26J76;
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
+				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.open4id.example.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				OTHER_CFLAGS = (
-					"$(inherited)",
-					"-fmodule-map-file=$(PROJECT_DIR)/Open4IDSDKModule/module.modulemap",
-				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-ObjC",
-				);
-				TARGETED_DEVICE_FAMILY = "1";
-				INFOPLIST_FILE = Info.plist;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = 1;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
-		BB0000000000000000000005 /* Debug */ = {
+		B10000000000000000000H05 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -256,11 +252,11 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
-		BB0000000000000000000006 /* Release */ = {
+		B10000000000000000000H06 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -271,35 +267,42 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		BB0000000000000000000007 /* Build configuration list for PBXNativeTarget "ios-sdk-minimal-objc" */ = {
+		B10000000000000000000H01 /* Build configuration list for PBXNativeTarget "ios-sdk-minimal-objc" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				BB0000000000000000000003 /* Debug */,
-				BB0000000000000000000004 /* Release */,
+				B10000000000000000000H02 /* Debug */,
+				B10000000000000000000H03 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BB0000000000000000000008 /* Build configuration list for PBXProject "ios-sdk-minimal-objc" */ = {
+		B10000000000000000000H04 /* Build configuration list for PBXProject "ios-sdk-minimal-objc" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				BB0000000000000000000005 /* Debug */,
-				BB0000000000000000000006 /* Release */,
+				B10000000000000000000H05 /* Debug */,
+				B10000000000000000000H06 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		B10000000000000000000D02 /* XCLocalSwiftPackageReference "../../sdks/ios" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../sdks/ios;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
-		BB000000000000000000000C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+		B10000000000000000000D03 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
 			requirement = {
@@ -310,12 +313,17 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		BB000000000000000000000E /* GoogleSignIn */ = {
+		B10000000000000000000D01 /* Open4IDSDK */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = BB000000000000000000000C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			package = B10000000000000000000D02 /* XCLocalSwiftPackageReference "../../sdks/ios" */;
+			productName = Open4IDSDK;
+		};
+		B10000000000000000000D04 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B10000000000000000000D03 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = BB0000000000000000000002 /* Project object */;
+	rootObject = B10000000000000000000J01 /* Project object */;
 }

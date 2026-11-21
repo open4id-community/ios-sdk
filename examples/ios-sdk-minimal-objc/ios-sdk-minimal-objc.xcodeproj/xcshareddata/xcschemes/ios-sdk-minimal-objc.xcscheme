@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "BB0000000000000000000001"
+               BlueprintIdentifier = "B10000000000000000000G01"
                BuildableName = "ios-sdk-minimal-objc.app"
                BlueprintName = "ios-sdk-minimal-objc"
                ReferencedContainer = "container:ios-sdk-minimal-objc.xcodeproj">
@@ -44,7 +44,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "BB0000000000000000000001"
+            BlueprintIdentifier = "B10000000000000000000G01"
             BuildableName = "ios-sdk-minimal-objc.app"
             BlueprintName = "ios-sdk-minimal-objc"
             ReferencedContainer = "container:ios-sdk-minimal-objc.xcodeproj">
@@ -64,7 +64,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "BB0000000000000000000001"
+            BlueprintIdentifier = "B10000000000000000000G01"
             BuildableName = "ios-sdk-minimal-objc.app"
             BlueprintName = "ios-sdk-minimal-objc"
             ReferencedContainer = "container:ios-sdk-minimal-objc.xcodeproj">

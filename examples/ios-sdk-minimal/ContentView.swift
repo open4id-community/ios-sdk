@@ -251,10 +251,12 @@ struct ContentView: View {
                     append("attestation: \(report.verdict.rawValue) (\(report.reason ?? "-"))")
                     // Debug hook for automated verification: launch with
                     // SIMCTL_CHILD_OPEN4ID_AUTOTEST=github|facebook|apple to
-                    // auto-run one web flow, or =payments to auto-run the
+                    // auto-run one web flow, =payments to auto-run the
                     // payment rehearsal (catalog + StoreKit products +
                     // purchase of the first one_time row; the StoreKit sheet
-                    // needs the human's confirm in DeviceHub).
+                    // needs the human's confirm in DeviceHub), or =restore to
+                    // run the interactive restore (same call as the button,
+                    // including the App Store account sync).
                     if let autotest = ProcessInfo.processInfo.environment["OPEN4ID_AUTOTEST"] {
                         try await Task.sleep(nanoseconds: 5_000_000_000)
                         if autotest == "github" {
@@ -266,6 +268,9 @@ struct ContentView: View {
                         } else if autotest == "github-ephemeral" {
                             appClient.setPrefersEphemeralWebSessions(true)
                             try await signInGitHub()
+                        } else if autotest == "restore" {
+                            append("autotest: interactive restore (store sync)")
+                            try await restorePurchases()
                         } else if autotest == "payments" {
                             try await loadShop()
                             try await Task.sleep(nanoseconds: 10_000_000_000)
@@ -546,12 +551,22 @@ struct ContentView: View {
         }
     }
 
-    /// SDK restore through the proof source the built-in store registered
-    /// (`Transaction.currentEntitlements`).
+    /// User-initiated **Restore purchases**. The interactive variant asks the
+    /// App Store account first (`AppStore.sync()`, which is what raises the
+    /// store sign-in sheet after a reinstall) and only then repairs the
+    /// ledger. The passive `payments().restore()` the launch bootstrap runs
+    /// never prompts — that one is for the automatic path only.
     private func restorePurchases() async throws {
-        let result = try await appClient.payments().restore()
-        append("restore ok: verified=\(result.verified) rejected=\(result.rejected) "
-            + "conflict=\(result.conflict) noProofs=\(result.proofsUnavailable)")
+        do {
+            let result = try await appClient.storeKitPayments().restoreInteractive()
+            append("restore ok: verified=\(result.verified) rejected=\(result.rejected) "
+                + "conflict=\(result.conflict) noProofs=\(result.proofsUnavailable) "
+                + "storeSynced=\(result.storeSynced)")
+        } catch let error as SdkStoreSignInCancelledError {
+            // The player dismissed the sheet: nothing was submitted, so this
+            // is not a failed restore and must not read as "no purchases".
+            append("store: sign-in cancelled — nothing submitted (\(error.key))")
+        }
     }
 
     private func refreshEntitlements() async throws {

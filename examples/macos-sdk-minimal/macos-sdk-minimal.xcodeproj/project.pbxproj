@@ -250,21 +250,17 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		B20000000000000000000D02 /* XCRemoteSwiftPackageReference "ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/open4id-community/ios-sdk";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.6.0;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		B20000000000000000000D02 /* XCLocalSwiftPackageReference "Open4IDSDK" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../sdks/ios;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		B20000000000000000000D01 /* Open4IDSDK */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B20000000000000000000D02 /* XCRemoteSwiftPackageReference "ios-sdk" */;
+			package = B20000000000000000000D02 /* XCLocalSwiftPackageReference "Open4IDSDK" */;
 			productName = Open4IDSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
