@@ -3,9 +3,11 @@
 Objective-C twin of `examples/macos-sdk-minimal/`: a minimal **AppKit** app
 that verifies Open4ID **App Store IAP** end to end through the Open4ID SDK's
 **Objective-C surface** — the same `@objc` completion-handler API the Swift
-sibling reaches through `async`/`await`. It resolves the SDK from the local
-Swift package (`../../sdks/ios`, the same convention as the other in-repo
-examples). Scoped to **payments only** — there is no login, social, session,
+sibling reaches through `async`/`await`. It links the SDK as the prebuilt
+**XCFramework** at the repo root (`../../Open4IDSDK-1.0.2.xcframework`,
+unzip the release asset there) with a Clang module-map adapter
+(`Open4IDSDKModule/`) so `@import Open4IDSDK;` resolves against the static
+library. Scoped to **payments only** — there is no login, social, session,
 or account UI.
 
 The payment feature lives in the SDK now — `client.storeKitPayments` (the
@@ -54,13 +56,15 @@ former `StoreKitBridge.swift` is gone.
 | `AppDelegate.h/.m` | App delegate; holds the shared `Open4IDAuthClient`, builds the window |
 | `ViewController.h/.m` | Main UI in pure ObjC: config fields, action buttons, log console, all SDK calls |
 | `Info.plist` | App bundle config |
-| `macos-sdk-minimal-objc.xcodeproj/` | Xcode project (SPM reference to the local `sdks/ios` package) |
+| `Open4IDSDKModule/` | Clang module map bridging the XCFramework's Swift-generated header so pure-ObjC consumers can `@import Open4IDSDK;`; the `Open4IDSDK-Swift.h` symlink targets the **macOS** slice's header |
+| `macos-sdk-minimal-objc.xcodeproj/` | Xcode project (links `Open4IDSDK-1.0.2.xcframework` + `-fmodule-map-file` build setting) |
 
 ## Requirements
 
 - macOS 13+ with Xcode 15+.
-- The app references the SDK as a **local Swift package**
-  (`../../sdks/ios`) — no registry dependency.
+- Unzip the release asset at the repo root:
+  `unzip Open4IDSDK-1.0.2.xcframework.zip -d .` — the example links
+  `../../Open4IDSDK-1.0.2.xcframework`.
 
 ## Build & run
 
@@ -222,9 +226,10 @@ To re-test a fresh cycle locally:
 > that persists while another node **sharing the same database** verifies
 > fine means the node itself is missing its pinned Apple root — the
 > release must ship `priv/payment/apple_root_ca_g3.pem` (missing or
-> mismatched file answers 503 before the JWS is read). For
-> local-stack runs set `OPEN4ID_ENDPOINT` = `http://localhost:10001/api`
-> (scheme **Run → Arguments → Environment Variables**, or edit the Endpoint
+> mismatched file answers 503 before the JWS is read). To verify against a
+> different Open4ID deployment (one where the application's App Store
+> section is configured), set `OPEN4ID_ENDPOINT` accordingly (scheme
+> **Run → Arguments → Environment Variables**, or edit the Endpoint
 > field). A green server-side verify then still needs a real sandbox
 > purchase — see the Swift sibling's store-environment notes.
 
@@ -256,7 +261,7 @@ dev application `app_4a17c6…`, environment `development`, bundle id
 ## Notes
 
 - The SDK's macOS support is described in
-  [`sdks/ios/README.md`](../../sdks/ios/README.md#macos-support): a native
+  [`sdks/ios/README.md`](https://github.com/open4id/open4id/blob/main/sdks/ios/README.md#macos-support): a native
   macOS target asserts `platform: "macos"`. This is a native macOS target,
   so it sends `macos`.
 - No login runs here, so the app needs no URL-scheme callback and no

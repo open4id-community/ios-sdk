@@ -1,1 +1,1 @@
-../../../Open4IDSDK-0.8.8.xcframework/macos-arm64_x86_64/Headers/Open4IDSDK-Swift.h
+../../../Open4IDSDK-1.0.0.xcframework/macos-arm64_x86_64/Headers/Open4IDSDK-Swift.h
