@@ -16,7 +16,12 @@ The monorepo tags every release `ios-v<version>` (lineage marker).
 - Player API request bodies consistently include the existing `device_id`
   attribution field.
 
-## 1.1.0 (unreleased)
+## 1.0.3 (2026-11-28)
+
+- **Direct PayPal payments (macOS)**: signed-in and `email_and_code`
+  products can create a checkout, activate a verified license, and resend a
+  license code through the native `Payments` API. PayPal remains unavailable
+  on iOS because mobile external payments are disabled.
 
 - **Publisher events**: `trackEvent(_:value:)` (ObjC `trackEvent:` /
   `trackEvent:value:`) sends `POST /client/events`, the explicit counterpart
